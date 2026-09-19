@@ -1,0 +1,26 @@
+# Системное
+.DS_Store
+.claude/
+
+# Веб-приложение
+web-app/node_modules/
+web-app/dist/
+*.tsbuildinfo
+
+# Синхронизация контента (локальные прогоны)
+__pycache__/
+*.pyc
+content-sync/content/
+content-sync/work/
+
+# Нативная версия (Swift / Xcode)
+ios-app/TrenazherKit/.build/
+ios-app/TrenazherKit/.swiftpm/
+ios-app/Trenazher.xcodeproj/
+xcuserdata/
+DerivedData/
+
+# Секреты — никогда не коммитим
+ios-app/Config/Secrets.xcconfig
+*.env
+!deploy/sync.env.example
