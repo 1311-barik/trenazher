@@ -1,0 +1,17 @@
+[Unit]
+Description=Тренажёр: синхронизация контента из Google-таблицы и Drive
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=trenazher
+Group=trenazher
+EnvironmentFile=/etc/trenazher/sync.env
+Environment=TRENAZHER_OUT=/var/www/trenazher/content
+Environment=TRENAZHER_WORK=/var/lib/trenazher
+WorkingDirectory=/opt/trenazher/content-sync
+ExecStart=/usr/bin/python3 /opt/trenazher/content-sync/sync.py
+Nice=19
+IOSchedulingClass=idle
+TimeoutStartSec=6h

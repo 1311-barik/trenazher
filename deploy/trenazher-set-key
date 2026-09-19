@@ -1,0 +1,30 @@
+#!/bin/bash
+# Записать API-ключ Google для синхронизации и включить таймер. Запускать на сервере:
+#   ssh -t -i ~/.ssh/familybot root@135.181.197.13 trenazher-set-key
+# Ключ вводится скрыто и не попадает в историю команд.
+set -euo pipefail
+
+KEY=""
+for attempt in 1 2 3; do
+    read -r -s -p "API-ключ Google (вставьте один раз и нажмите Enter): " KEY
+    echo
+    # Ключ Google — ровно 39 символов и начинается с «AIza». Символы при вводе не видны,
+    # поэтому легко вставить ключ дважды — такое ловим и просим повторить.
+    if [[ "$KEY" =~ ^AIza[A-Za-z0-9_-]{35}$ ]]; then
+        break
+    fi
+    echo "Это не похоже на ключ Google: вставлено ${#KEY} символов, а нужно 39, начиная с AIza. Возможно, ключ вставился несколько раз."
+    KEY=""
+done
+if [[ -z "$KEY" ]]; then
+    echo "Ничего не изменено. Скопируйте ключ ещё раз и запустите команду заново."
+    exit 1
+fi
+
+install -d -m 750 -o root -g trenazher /etc/trenazher
+umask 077
+sed "s|^TRENAZHER_API_KEY=.*|TRENAZHER_API_KEY=$KEY|" /opt/trenazher/deploy/sync.env.example > /etc/trenazher/sync.env
+chown root:trenazher /etc/trenazher/sync.env && chmod 640 /etc/trenazher/sync.env
+systemctl enable --now trenazher-sync.timer
+systemctl start --no-block trenazher-sync.service
+echo "Готово: ключ сохранён, синхронизация запущена. Первая загрузка фото и видео займёт время."

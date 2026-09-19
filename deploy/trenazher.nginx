@@ -1,0 +1,46 @@
+# Тренажёр — PWA + контент. HTTPS добавляет certbot (certbot --nginx), он же дописывает редирект с HTTP.
+server {
+    listen 80;
+    listen [::]:80;
+    server_name trenazher-135-181-197-13.nip.io;
+
+    root /var/www/trenazher/app;
+    index index.html;
+    charset utf-8;
+
+    gzip on;
+    gzip_types application/javascript text/css application/json application/manifest+json image/svg+xml;
+
+    # Оболочка приложения: всегда проверять обновление (сам service worker обновляет кэш).
+    location = /index.html { add_header Cache-Control "no-cache"; }
+    location = /sw.js { add_header Cache-Control "no-cache"; }
+    location = /manifest.webmanifest {
+        types { application/manifest+json webmanifest; }
+        add_header Cache-Control "no-cache";
+    }
+    location /assets/ { add_header Cache-Control "public, max-age=31536000, immutable"; }
+
+    # Контент из синхронизации: манифест — без кэша, медиа — навсегда (версия в имени файла).
+    location = /content/manifest.json {
+        alias /var/www/trenazher/content/manifest.json;
+        add_header Cache-Control "no-cache";
+    }
+    location /content/media/ {
+        alias /var/www/trenazher/content/media/;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+    }
+    location /content/ { return 404; }
+
+    # Напоминание в Календарь iPhone: повторяющееся событие по параметрам из приложения.
+    location = /reminder.ics {
+        if ($arg_days !~ "^(MO|TU|WE|TH|FR|SA|SU)(,(MO|TU|WE|TH|FR|SA|SU)){0,6}$") { return 400; }
+        if ($arg_start !~ "^[0-9]{8}T[0-9]{6}$") { return 400; }
+        if ($arg_end !~ "^[0-9]{8}T[0-9]{6}$") { return 400; }
+        default_type "text/calendar; charset=utf-8";
+        add_header Cache-Control "no-store";
+        add_header Content-Disposition 'inline; filename="trenazher.ics"';
+        return 200 "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Trenazher//RU\r\nCALSCALE:GREGORIAN\r\nMETHOD:PUBLISH\r\nBEGIN:VEVENT\r\nUID:trenazher-reminder-$arg_start@trenazher\r\nDTSTAMP:20260101T000000Z\r\nDTSTART:$arg_start\r\nDTEND:$arg_end\r\nRRULE:FREQ=WEEKLY;BYDAY=$arg_days\r\nSUMMARY:Тренировка\r\nDESCRIPTION:Открой Тренажёр и выбери тренировку.\r\nURL:https://trenazher-135-181-197-13.nip.io/\r\nBEGIN:VALARM\r\nACTION:DISPLAY\r\nDESCRIPTION:Время тренировки\r\nTRIGGER:-PT0M\r\nEND:VALARM\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+    }
+
+    location / { try_files $uri $uri/ /index.html; }
+}
