@@ -1,0 +1,674 @@
+"""Разбор таблицы «Дрон тренировка» и сопоставление файлов Drive — чистая логика без сети.
+
+Порт Swift-модуля TrenazherKit (ios-app/TrenazherKit/Sources/TrenazherKit/Content) с тем же
+поведением: те же правила сопоставления, те же ID упражнений, те же тексты замечаний.
+Совместимо с Python 3.9 (Mac) и 3.12 (сервер), только стандартная библиотека.
+"""
+
+import os
+import re
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from typing import Dict, List, Optional, Sequence, Set, Tuple
+
+SCHEMA_VERSION = 1
+
+
+# ---------------------------------------------------------------------------
+# Текст
+
+
+def text_key(text: str) -> str:
+    """Ключ сравнения: регистр, «ё», пунктуация и лишние пробелы не важны."""
+    lowered = text.lower().replace("ё", "е")
+    chars = [ch if ch.isalnum() else " " for ch in lowered]
+    return " ".join("".join(chars).split())
+
+
+def display_name(text: str) -> str:
+    """Название для показа: без пробелов и точек в конце («Медвежья планка в динамике.»)."""
+    value = text.strip()
+    while value.endswith("."):
+        value = value[:-1]
+    return value.strip()
+
+
+def non_empty(text: str) -> Optional[str]:
+    value = text.strip()
+    return value or None
+
+
+def paragraph_text(text: str) -> str:
+    """Описание: пробелы по краям строк убраны, 3+ переноса схлопнуты в одну пустую строку."""
+    lines = [line.strip() for line in text.replace("\r\n", "\n").split("\n")]
+    result: List[str] = []
+    for line in lines:
+        if not line and (not result or not result[-1]):
+            continue
+        result.append(line)
+    while result and not result[-1]:
+        result.pop()
+    return "\n".join(result)
+
+
+def stable_hash(*parts: str) -> str:
+    """FNV-1a 64 — детерминированный короткий хеш для версий и имён файлов."""
+    value = 0xCBF29CE484222325
+    for byte in "\x1f".join(parts).encode("utf-8"):
+        value ^= byte
+        value = (value * 0x100000001B3) & 0xFFFFFFFFFFFFFFFF
+    return format(value, "x")
+
+
+def natural_key(text: str):
+    """Сортировка «как в Finder»: «Молот 2» < «Молот 10»."""
+    return [int(part) if part.isdigit() else part.lower() for part in re.split(r"(\d+)", text)]
+
+
+def plural(count: int, one: str, few: str, many: str) -> str:
+    n = abs(count) % 100
+    n1 = n % 10
+    if 10 < n < 20:
+        return many
+    if 1 < n1 < 5:
+        return few
+    if n1 == 1:
+        return one
+    return many
+
+
+# ---------------------------------------------------------------------------
+# Замечания
+
+
+def issue(severity: str, message: str) -> Dict[str, str]:
+    return {"severity": severity, "message": message}
+
+
+SEVERITY_RANK = {"error": 0, "warning": 1, "info": 2}
+
+
+# ---------------------------------------------------------------------------
+# Лист упражнений
+
+
+@dataclass
+class ExerciseRow:
+    row_number: int
+    body_part: str
+    muscle_group: Optional[str]
+    name: str
+    equipment: Optional[str]
+    details: str
+    sets: Optional[int]
+    photo_cell: str
+    other_video_cell: str
+    own_video_cell: str
+
+
+FALLBACK_LAYOUT = {
+    "body_part": 0, "muscle_group": 1, "name": 2, "equipment": 3,
+    "details": 4, "photos": 5, "other_videos": 6, "own_videos": 7,
+}
+
+
+def column_for_header(header: str) -> Optional[str]:
+    """Колонка по заголовку. Порядок проверок важен: «Фото упражнений» — это фото, а не название."""
+    key = text_key(header)
+    if not key:
+        return None
+    if "фото" in key:
+        return "photos"
+    if "чуж" in key:
+        return "other_videos"
+    if "жен" in key:
+        return "own_videos"
+    if "описан" in key or "техник" in key:
+        return "details"
+    if "подход" in key:
+        return "sets"
+    if "тела" in key or "раздел" in key:
+        return "body_part"
+    if "мышц" in key:
+        return "muscle_group"
+    if "гантел" in key or "инвентар" in key or "оборудован" in key:
+        return "equipment"
+    if "упражнен" in key or key == "название":
+        return "name"
+    return None
+
+
+def leading_integer(text: str) -> Optional[int]:
+    match = re.search(r"\d+", text)
+    return int(match.group(0)) if match else None
+
+
+def parse_exercise_sheet(rows: Sequence[Sequence[str]]) -> Tuple[List[ExerciseRow], List[Dict[str, str]]]:
+    """Лист в том виде, как его ведёт Женя: часть тела и группа мышц — только в первой строке раздела."""
+    issues: List[Dict[str, str]] = []
+    layout: Dict[str, int] = {}
+    header_index: Optional[int] = None
+    for index, row in enumerate(rows[:10]):
+        candidate: Dict[str, int] = {}
+        for column_index, cell in enumerate(row):
+            column = column_for_header(cell)
+            if column and column not in candidate:
+                candidate[column] = column_index
+        if "name" in candidate:
+            layout, header_index = candidate, index
+            break
+    if header_index is None:
+        layout = dict(FALLBACK_LAYOUT)
+        issues.append(issue("warning", "В таблице упражнений не найдена строка заголовков с колонкой «Упражнение» — "
+                                       "использую порядок колонок по умолчанию (A–H)."))
+
+    result: List[ExerciseRow] = []
+    current_part: Optional[str] = None
+    current_group: Optional[str] = None
+    first_data_row = (header_index if header_index is not None else -1) + 1
+
+    for index in range(first_data_row, len(rows)):
+        row = rows[index]
+
+        def cell(column: str) -> str:
+            position = layout.get(column)
+            if position is None or position >= len(row):
+                return ""
+            return row[position]
+
+        part = cell("body_part").strip()
+        group = cell("muscle_group").strip()
+        if part:
+            current_part = part
+            current_group = group or None
+        elif group:
+            current_group = group
+
+        name = display_name(cell("name"))
+        if not name:
+            continue
+        row_number = index + 1
+        if current_part is None:
+            issues.append(issue("warning", f"Строка {row_number}: у упражнения «{name}» не указана часть тела — упражнение пропущено."))
+            continue
+
+        sets: Optional[int] = None
+        raw_sets = non_empty(cell("sets"))
+        if raw_sets:
+            sets = leading_integer(raw_sets)
+            if not sets:
+                sets = None
+                issues.append(issue("warning", f"Строка {row_number}, «{name}»: не понял число подходов «{raw_sets}» — "
+                                               "таймер будет без счётчика."))
+
+        result.append(ExerciseRow(
+            row_number=row_number, body_part=current_part, muscle_group=current_group, name=name,
+            equipment=non_empty(cell("equipment")), details=paragraph_text(cell("details")), sets=sets,
+            photo_cell=cell("photos"), other_video_cell=cell("other_videos"), own_video_cell=cell("own_videos"),
+        ))
+
+    if not result:
+        issues.append(issue("error", "В таблице не найдено ни одного упражнения."))
+    return result, issues
+
+
+# ---------------------------------------------------------------------------
+# Лист «Тренировки»
+
+
+@dataclass
+class WorkoutRow:
+    title: str
+    summary: Optional[str]
+    exercises: List[Tuple[int, str]] = field(default_factory=list)
+
+
+def parse_workout_sheet(rows: Sequence[Sequence[str]]) -> Tuple[List[WorkoutRow], List[Dict[str, str]]]:
+    """Колонки «Тренировка», «Описание», «Упражнение»; название — только в первой строке тренировки."""
+    title_col = summary_col = exercise_col = header = None
+    for index, row in enumerate(rows[:10]):
+        title_col = summary_col = exercise_col = None
+        for column_index, cell in enumerate(row):
+            key = text_key(cell)
+            if "упражнен" in key and exercise_col is None:
+                exercise_col = column_index
+            elif "описан" in key and summary_col is None:
+                summary_col = column_index
+            elif ("трениров" in key or key == "название") and title_col is None:
+                title_col = column_index
+        if title_col is not None and exercise_col is not None:
+            header = index
+            break
+
+    if header is None:
+        has_content = any(cell.strip() for row in rows for cell in row)
+        if has_content:
+            return [], [issue("warning", "Лист «Тренировки»: не найдены заголовки «Тренировка» и «Упражнение» — "
+                                         "готовые тренировки не загружены.")]
+        return [], []
+
+    workouts: List[WorkoutRow] = []
+    for index in range(header + 1, len(rows)):
+        row = rows[index]
+
+        def cell(column: Optional[int]) -> str:
+            if column is None or column >= len(row):
+                return ""
+            return row[column].strip()
+
+        title = display_name(cell(title_col))
+        summary = non_empty(cell(summary_col))
+        if title:
+            workouts.append(WorkoutRow(title=title, summary=summary))
+        elif summary and workouts and workouts[-1].summary is None:
+            workouts[-1].summary = summary
+        exercise = display_name(cell(exercise_col))
+        if exercise and workouts:
+            workouts[-1].exercises.append((index + 1, exercise))
+    return workouts, []
+
+
+# ---------------------------------------------------------------------------
+# Файлы Drive и ячейки с файлами
+
+MEDIA_EXTENSIONS = {"jpg", "jpeg", "png", "heic", "heif", "webp", "gif", "mov", "mp4", "m4v"}
+VIDEO_EXTENSIONS = {"mov", "mp4", "m4v"}
+
+
+@dataclass(frozen=True)
+class DriveFile:
+    id: str
+    name: str
+    mime_type: str = ""
+    md5: Optional[str] = None
+    modified_time: Optional[str] = None
+    size: Optional[int] = None
+
+    @property
+    def base_name(self) -> str:
+        stem, ext = os.path.splitext(self.name)
+        if ext[1:].lower() in MEDIA_EXTENSIONS:
+            return stem.strip()
+        return self.name.strip()
+
+    @property
+    def extension(self) -> str:
+        ext = os.path.splitext(self.name)[1][1:].lower()
+        if ext in MEDIA_EXTENSIONS:
+            return ext
+        if "quicktime" in self.mime_type:
+            return "mov"
+        if "mp4" in self.mime_type:
+            return "mp4"
+        if "png" in self.mime_type:
+            return "png"
+        if self.mime_type.startswith("image/"):
+            return "jpg"
+        return ext
+
+    @property
+    def is_folder(self) -> bool:
+        return self.mime_type == "application/vnd.google-apps.folder"
+
+    @property
+    def version(self) -> str:
+        return self.md5 or self.modified_time or self.id
+
+    @staticmethod
+    def from_json(data: Dict) -> "DriveFile":
+        size = data.get("size")
+        return DriveFile(id=data["id"], name=data["name"], mime_type=data.get("mimeType", ""),
+                         md5=data.get("md5Checksum"), modified_time=data.get("modifiedTime"),
+                         size=int(size) if size not in (None, "") else None)
+
+
+PRESENT_MARKERS = {"есть", "да", "есть файл", "yes"}
+DRIVE_ID_PATTERNS = [re.compile(r"/d/([A-Za-z0-9_-]{10,})"), re.compile(r"[?&]id=([A-Za-z0-9_-]{10,})")]
+BARE_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{25,}$")
+
+
+def drive_id_in(text: str) -> Optional[str]:
+    if "google.com" in text:
+        for pattern in DRIVE_ID_PATTERNS:
+            match = pattern.search(text)
+            if match:
+                return match.group(1)
+        return None
+    if BARE_ID_PATTERN.match(text) and " " not in text:
+        return text
+    return None
+
+
+def parse_media_cell(cell: str):
+    """('auto', expected) — пусто или «есть»; ('none',) — «нет»; ('explicit', [('id'|'name', value)])."""
+    text = cell.strip()
+    if not text:
+        return ("auto", False)
+    if text == "+":
+        return ("auto", True)
+    if text in ("-", "—", "–"):
+        return ("none",)
+    key = text_key(text)
+    if key in PRESENT_MARKERS:
+        return ("auto", True)
+    if key == "нет" or key.startswith("нет "):
+        return ("none",)
+    tokens = [token.strip() for token in re.split(r"[\n;]", text) if token.strip()]
+    references = []
+    for token in tokens:
+        file_id = drive_id_in(token)
+        references.append(("id", file_id) if file_id else ("name", token))
+    return ("explicit", references) if references else ("auto", False)
+
+
+NUMBERING_SUFFIX = re.compile(r"[\s.]*((вар|вариант)\.?\s*)?\d+\s*$", re.IGNORECASE)
+STOP_WORDS = {"в", "во", "с", "со", "на", "из", "за", "под", "от", "к", "ко", "и", "для", "по", "до", "у"}
+
+
+def title_keys(title: str, strip_numbering: bool) -> Set[str]:
+    """Ключи имени файла: целиком и без ведущих «Раздел.» приставок."""
+    base = NUMBERING_SUFFIX.sub("", title) if strip_numbering else title
+    segments = [segment.strip() for segment in base.split(".") if segment.strip()]
+    keys = set()
+    for start in range(len(segments)):
+        key = text_key(" ".join(segments[start:]))
+        if key:
+            keys.add(key)
+    return keys
+
+
+def stems(text: str) -> Set[str]:
+    """Грубые основы слов: «гантелей» и «гантели» → «ганте»."""
+    result = set()
+    for word in text_key(text).split():
+        if word in STOP_WORDS or word.isdigit():
+            continue
+        length = len(word) if len(word) <= 3 else max(3, min(5, len(word) - 1))
+        result.add(word[:length])
+    return result
+
+
+class MediaMatcher:
+    """Однозначное сопоставление файлов папки с упражнением: явная ссылка в ячейке главнее,
+    автоматически — только точное совпадение имени без приставки раздела и номера."""
+
+    def __init__(self, files: Sequence[DriveFile]):
+        self.files = sorted([f for f in files if not f.is_folder], key=lambda f: natural_key(f.base_name))
+        self.by_id = {f.id: f for f in self.files}
+
+    def auto_matches(self, exercise_name: str) -> List[DriveFile]:
+        target = text_key(exercise_name)
+        if not target:
+            return []
+        return [f for f in self.files if target in title_keys(f.base_name, strip_numbering=True)]
+
+    def resolve(self, reference: Tuple[str, str]):
+        """('found', file) | ('not_found', None) | ('ambiguous', [files])."""
+        kind, value = reference
+        if kind == "id":
+            found = self.by_id.get(value)
+            return ("found", found) if found else ("not_found", None)
+        stem, ext = os.path.splitext(value)
+        target = text_key(stem if ext[1:].lower() in MEDIA_EXTENSIONS else value)
+        exact = [f for f in self.files if text_key(f.base_name) == target]
+        if len(exact) == 1:
+            return ("found", exact[0])
+        if len(exact) > 1:
+            return ("ambiguous", exact)
+        partial = [f for f in self.files if target in title_keys(f.base_name, strip_numbering=False)]
+        if len(partial) == 1:
+            return ("found", partial[0])
+        if len(partial) > 1:
+            return ("ambiguous", partial)
+        return ("not_found", None)
+
+    def suggestions(self, exercise_name: str, limit: int = 2) -> List[DriveFile]:
+        """Похожие файлы — только подсказка человеку, автоматически не привязываются."""
+        target = stems(exercise_name)
+        if not target:
+            return []
+        scored = []
+        for f in self.files:
+            segments = [s.strip() for s in f.base_name.split(".") if s.strip()]
+            best = 0.0
+            for start in range(len(segments)):
+                candidate = stems(" ".join(segments[start:]))
+                if not candidate:
+                    continue
+                common = len(target & candidate)
+                dice = 2 * common / (len(target) + len(candidate))
+                coverage = common / len(candidate)
+                best = max(best, (dice + coverage) / 2)
+            if best >= 0.5:
+                scored.append((f, best))
+        scored.sort(key=lambda item: (-item[1], natural_key(item[0].base_name)))
+        return [f for f, _ in scored[:limit]]
+
+
+# ---------------------------------------------------------------------------
+# Манифест
+
+FOLDER_TITLES = {"photo": "Фото упражнений", "ownVideo": "Женя видео", "otherVideo": "Чужие видео"}
+COLUMN_TITLES = {"photo": "Фото", "ownVideo": "Женя видео", "otherVideo": "Чужое видео"}
+
+
+@dataclass
+class Snapshot:
+    exercise_rows: List[List[str]]
+    workout_rows: List[List[str]] = field(default_factory=list)
+    photos: List[DriveFile] = field(default_factory=list)
+    own_videos: List[DriveFile] = field(default_factory=list)
+    other_videos: List[DriveFile] = field(default_factory=list)
+    issues: List[Dict[str, str]] = field(default_factory=list)
+
+
+def media_item(drive_file: DriveFile, kind: str) -> Dict:
+    return {
+        "driveFileId": drive_file.id,
+        "title": drive_file.base_name,
+        "fileExtension": drive_file.extension,
+        "kind": kind,
+        "version": drive_file.version,
+        "byteSize": drive_file.size,
+    }
+
+
+def _describe(reference: Tuple[str, str]) -> str:
+    kind, value = reference
+    return f"ссылка …{value[-6:]}" if kind == "id" else value
+
+
+def _resolve_cell(cell: str, kind: str, row: ExerciseRow, matcher: MediaMatcher, issues: List[Dict[str, str]]) -> List[DriveFile]:
+    place = f"Строка {row.row_number}, «{row.name}», колонка «{COLUMN_TITLES[kind]}»"
+    directive = parse_media_cell(cell)
+    if directive[0] == "none":
+        return []
+    if directive[0] == "auto":
+        found = matcher.auto_matches(row.name)
+        if not found and directive[1]:
+            hint = " или ".join(f"«{f.base_name}»" for f in matcher.suggestions(row.name))
+            suggestion = f" Возможно, подходит: {hint}." if hint else ""
+            issues.append(issue("warning", f"{place}: написано «есть», но файл с таким названием не найден.{suggestion} "
+                                           "Впишите в ячейку имя файла или ссылку на него."))
+        return found
+    files: List[DriveFile] = []
+    for reference in directive[1]:
+        status, value = matcher.resolve(reference)
+        if status == "found":
+            if value not in files:
+                files.append(value)
+        elif status == "not_found":
+            issues.append(issue("warning", f"{place}: файл «{_describe(reference)}» не найден в папке «{FOLDER_TITLES[kind]}»."))
+        else:
+            names = ", ".join(f"«{f.base_name}»" for f in value[:3])
+            issues.append(issue("warning", f"{place}: под «{_describe(reference)}» подходит несколько файлов ({names}) — уточните имя."))
+    return files
+
+
+def build_manifest(snapshot: Snapshot, now: Optional[datetime] = None) -> Dict:
+    """Манифест в том же формате, что у нативной версии (ContentManifest)."""
+    now = now or datetime.now(timezone.utc)
+    issues = list(snapshot.issues)
+    rows, parse_issues = parse_exercise_sheet(snapshot.exercise_rows)
+    issues += parse_issues
+
+    matchers = {
+        "photo": MediaMatcher(snapshot.photos),
+        "ownVideo": MediaMatcher(snapshot.own_videos),
+        "otherVideo": MediaMatcher(snapshot.other_videos),
+    }
+    used_ids: Set[str] = set()
+    exercises: List[Dict] = []
+    body_parts: List[str] = []
+    taken_ids: Set[str] = set()
+
+    for row in rows:
+        if row.body_part not in body_parts:
+            body_parts.append(row.body_part)
+        cells = {"photo": row.photo_cell, "ownVideo": row.own_video_cell, "otherVideo": row.other_video_cell}
+        media: Dict[str, List[Dict]] = {}
+        for kind in ("photo", "ownVideo", "otherVideo"):
+            files = _resolve_cell(cells[kind], kind, row, matchers[kind], issues)
+            used_ids.update(f.id for f in files)
+            media[kind] = [media_item(f, kind) for f in files]
+
+        exercise_id = f"{text_key(row.body_part)}/{text_key(row.name)}"
+        if exercise_id in taken_ids:
+            issues.append(issue("warning", f"Строка {row.row_number}: упражнение «{row.name}» в разделе «{row.body_part}» встречается повторно."))
+            exercise_id += f"#{row.row_number}"
+        taken_ids.add(exercise_id)
+
+        photos = media["photo"]
+        videos = media["ownVideo"] + media["otherVideo"]
+        version = stable_hash(row.name, row.body_part, row.muscle_group or "", row.equipment or "", row.details,
+                              str(row.sets) if row.sets else "",
+                              *[f"{m['driveFileId']}:{m['version']}" for m in photos + videos])
+        exercises.append({
+            "id": exercise_id, "name": row.name, "bodyPart": row.body_part, "muscleGroup": row.muscle_group,
+            "equipment": row.equipment, "details": row.details, "sets": row.sets,
+            "photos": photos, "videos": videos, "version": version,
+        })
+
+    workouts = _build_workouts(snapshot.workout_rows, exercises, issues)
+
+    for kind, matcher in matchers.items():
+        for f in matcher.files:
+            if f.id not in used_ids:
+                issues.append(issue("info", f"Файл «{f.base_name}» в папке «{FOLDER_TITLES[kind]}» не привязан ни к одному упражнению."))
+
+    content_version = stable_hash(*[e["version"] for e in exercises], *[w["version"] for w in workouts], *body_parts)
+    ordered_issues = [item for _, item in sorted(enumerate(issues), key=lambda pair: (SEVERITY_RANK[pair[1]["severity"]], pair[0]))]
+    return {
+        "schemaVersion": SCHEMA_VERSION,
+        "generatedAt": now.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "bodyParts": body_parts,
+        "exercises": exercises,
+        "workouts": workouts,
+        "issues": ordered_issues,
+        "contentVersion": content_version,
+    }
+
+
+def _build_workouts(rows: List[List[str]], exercises: List[Dict], issues: List[Dict[str, str]]) -> List[Dict]:
+    if not rows:
+        return []
+    parsed, parse_issues = parse_workout_sheet(rows)
+    issues += parse_issues
+    by_name: Dict[str, List[Dict]] = {}
+    for exercise in exercises:
+        by_name.setdefault(text_key(exercise["name"]), []).append(exercise)
+
+    def lookup(name: str) -> Optional[Dict]:
+        found = by_name.get(text_key(name))
+        if found:
+            return found[0]
+        parts = [p.strip() for p in name.split(".") if p.strip()]
+        if len(parts) < 2:
+            return None
+        part, exercise_name = text_key(parts[0]), text_key(" ".join(parts[1:]))
+        for exercise in exercises:
+            if text_key(exercise["bodyPart"]) == part and text_key(exercise["name"]) == exercise_name:
+                return exercise
+        return None
+
+    workouts: List[Dict] = []
+    taken: Set[str] = set()
+    for row in parsed:
+        ids = []
+        for row_number, name in row.exercises:
+            exercise = lookup(name)
+            if exercise:
+                ids.append(exercise["id"])
+            else:
+                issues.append(issue("warning", f"Лист «Тренировки», строка {row_number}: упражнение «{name}» не найдено в таблице упражнений."))
+        if not ids:
+            issues.append(issue("warning", f"Тренировка «{row.title}» пропущена: в ней нет ни одного найденного упражнения."))
+            continue
+        workout_id = f"workout/{text_key(row.title)}"
+        if workout_id in taken:
+            issues.append(issue("warning", f"Тренировка «{row.title}» встречается дважды — названия должны отличаться."))
+            workout_id += f"#{len(workouts)}"
+        taken.add(workout_id)
+        workouts.append({"id": workout_id, "title": row.title, "summary": row.summary, "exerciseIds": ids,
+                         "version": stable_hash(row.title, row.summary or "", *ids)})
+    return workouts
+
+
+def all_media(manifest: Dict) -> List[Dict]:
+    """Все медиа манифеста без повторов (один файл может быть у нескольких упражнений)."""
+    seen: Set[Tuple[str, str]] = set()
+    result = []
+    for exercise in manifest["exercises"]:
+        for item in exercise["photos"] + exercise["videos"]:
+            key = (item["driveFileId"], item["version"])
+            if key not in seen:
+                seen.add(key)
+                result.append(item)
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Отчёт
+
+
+def report_markdown(manifest: Dict) -> str:
+    """Отчёт для Жени: что приложение поняло из таблицы и что поправить."""
+    exercises = manifest["exercises"]
+    lines = ["# Отчёт по контенту тренажёра", "", f"Собрано: {manifest['generatedAt']}", ""]
+    parts = ", ".join(f"{p} — {sum(1 for e in exercises if e['bodyPart'] == p)}" for p in manifest["bodyParts"])
+    lines.append(f"- Упражнений: **{len(exercises)}** в {len(manifest['bodyParts'])} разделах: {parts}.")
+    lines.append(f"- Готовых тренировок: **{len(manifest['workouts'])}**.")
+    with_photo = sum(1 for e in exercises if e["photos"])
+    with_own = sum(1 for e in exercises if any(v["kind"] == "ownVideo" for v in e["videos"]))
+    with_other = sum(1 for e in exercises if any(v["kind"] == "otherVideo" for v in e["videos"]))
+    lines += [f"- С фото: {with_photo}, с видео Жени: {with_own}, с чужими видео: {with_other}.", "",
+              "## Упражнения и привязанные файлы", "",
+              "| Раздел | Упражнение | Фото | Видео Жени | Чужие видео |", "|---|---|---|---|---|"]
+
+    def cell(items: List[Dict]) -> str:
+        return "<br>".join(i["title"] for i in items) if items else "—"
+
+    for e in exercises:
+        own = [v for v in e["videos"] if v["kind"] == "ownVideo"]
+        other = [v for v in e["videos"] if v["kind"] == "otherVideo"]
+        lines.append(f"| {e['bodyPart']} | {e['name']} | {cell(e['photos'])} | {cell(own)} | {cell(other)} |")
+    lines.append("")
+
+    if manifest["workouts"]:
+        lines += ["## Готовые тренировки", ""]
+        by_id = {e["id"]: e["name"] for e in exercises}
+        for w in manifest["workouts"]:
+            names = [by_id[i] for i in w["exerciseIds"] if i in by_id]
+            lines.append(f"- **{w['title']}** ({len(names)} {plural(len(names), 'упражнение', 'упражнения', 'упражнений')}): {', '.join(names)}")
+        lines.append("")
+
+    groups = [("error", "Ошибки — без исправления контент не загрузится"), ("warning", "Нужно поправить в таблице"),
+              ("info", "Для сведения")]
+    lines += [f"## Замечания ({len(manifest['issues'])})", ""]
+    if not manifest["issues"]:
+        lines.append("Замечаний нет.")
+    for severity, title in groups:
+        items = [i for i in manifest["issues"] if i["severity"] == severity]
+        if items:
+            lines += [f"### {title} ({len(items)})", ""] + [f"- {i['message']}" for i in items] + [""]
+    return "\n".join(lines)
