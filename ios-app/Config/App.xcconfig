@@ -1,0 +1,18 @@
+// Общие настройки сборки «Тренажёра».
+// Личные значения (API-ключ, команда разработчика, iCloud) — в Secrets.xcconfig рядом.
+// Шаблон: Secrets.example.xcconfig. Без Secrets.xcconfig приложение собирается и запускается
+// в симуляторе, но без загрузки контента из Google и без синхронизации через iCloud.
+
+APP_BUNDLE_ID = com.barsky.trenazher
+DEVELOPMENT_TEAM =
+
+// Таблица «Дрон тренировка» и папка «Андрей тренировка» на Google Drive.
+GOOGLE_SPREADSHEET_ID = 154Nt_78z4PDUeJczNywN4wzZaquOhaN2MYMb5gOFNhE
+GOOGLE_DRIVE_FOLDER_ID = 10A-FpWZl55XTr16MmHx5TCh9WVvQw0_x
+GOOGLE_API_KEY =
+
+// Пусто — избранное и история только на устройстве (подходит для бесплатного аккаунта разработчика).
+CLOUDKIT_CONTAINER_ID =
+APP_ENTITLEMENTS = App/Trenazher-Local.entitlements
+
+#include? "Secrets.xcconfig"
