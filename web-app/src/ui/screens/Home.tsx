@@ -34,7 +34,7 @@ export function Home() {
         ) : (
           <>
             <button className="main-action tappable" onClick={() => go("/ready")}>
-              <span className="badge" style={{ background: "var(--blue)" }}><Icon name="list" size={28} /></span>
+              <span className="badge blue"><Icon name="list" size={28} /></span>
               <span className="text">
                 <span className="title-m" style={{ display: "block" }}>Готовая тренировка</span>
                 <span className="muted small">{manifest.workouts.length ? `В списке: ${workoutsText(manifest.workouts.length)}` : "Список скоро появится"}</span>
@@ -42,7 +42,7 @@ export function Home() {
               <span className="faint"><Icon name="forward" /></span>
             </button>
             <button className="main-action tappable" onClick={() => go("/custom")}>
-              <span className="badge" style={{ background: "var(--accent)" }}><Icon name="grid" size={28} /></span>
+              <span className="badge gold"><Icon name="grid" size={28} /></span>
               <span className="text">
                 <span className="title-m" style={{ display: "block" }}>Собрать свою тренировку</span>
                 <span className="muted small">Выбрать части тела и отметить упражнения</span>

@@ -38,7 +38,7 @@ server {
         if ($arg_end !~ "^[0-9]{8}T[0-9]{6}$") { return 400; }
         default_type "text/calendar; charset=utf-8";
         add_header Cache-Control "no-store";
-        add_header Content-Disposition 'inline; filename="trenazher.ics"';
+        add_header Content-Disposition 'attachment; filename="trenazher.ics"';
         return 200 "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Trenazher//RU\r\nCALSCALE:GREGORIAN\r\nMETHOD:PUBLISH\r\nBEGIN:VEVENT\r\nUID:trenazher-reminder-$arg_start@trenazher\r\nDTSTAMP:20260101T000000Z\r\nDTSTART:$arg_start\r\nDTEND:$arg_end\r\nRRULE:FREQ=WEEKLY;BYDAY=$arg_days\r\nSUMMARY:Тренировка\r\nDESCRIPTION:Открой Тренажёр и выбери тренировку.\r\nURL:https://trenazher-135-181-197-13.nip.io/\r\nBEGIN:VALARM\r\nACTION:DISPLAY\r\nDESCRIPTION:Время тренировки\r\nTRIGGER:-PT0M\r\nEND:VALARM\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
     }
 

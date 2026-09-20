@@ -132,7 +132,7 @@ function SetsPanel({ session, exercise }: { session: WorkoutSession; exercise?: 
             ) : null}
           </div>
           {!allDone ? (
-            <button className="btn btn-secondary" onClick={markSet}>
+            <button className="btn btn-primary" onClick={markSet}>
               <Icon name="check" /> {settings.restTimerEnabled ? `Подход выполнен · отдых ${seconds} с` : "Подход выполнен"}
             </button>
           ) : null}
@@ -144,7 +144,7 @@ function SetsPanel({ session, exercise }: { session: WorkoutSession; exercise?: 
             <Icon name="back" />
           </button>
         ) : null}
-        <button className="btn btn-primary" onClick={() => store.updateSession(S.next)}>
+        <button className={`btn ${allDone ? "btn-primary" : "btn-secondary"}`} onClick={() => store.updateSession(S.next)}>
           {S.isLastInQueue(session) ? "Закончить список" : "Следующее упражнение"} <Icon name="forward" />
         </button>
       </div>
@@ -163,16 +163,16 @@ function RestCountdown() {
   const left = Math.max(0, Math.ceil((rest.endsAt - now) / 1000));
   const progress = 1 - left / rest.total;
   return (
-    <div>
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <div style={{ flex: 1 }}>
-          <div className="small muted" style={{ fontWeight: 700 }}>Отдых</div>
-          <div className="rest-digits" aria-label={`Осталось ${left} секунд`}>{timerText(left)}</div>
-        </div>
-        <button className="btn-pill" onClick={() => store.extendRest(15)} aria-label="Добавить 15 секунд">+15 с</button>
-        <button className="btn-pill" onClick={store.stopRest}>Пропустить</button>
+    <div className="rest">
+      <div className="rest-top">
+        <span className="small muted" style={{ fontWeight: 700 }}>Отдых</span>
+        <span className="rest-digits" aria-label={`Осталось ${left} секунд`}>{timerText(left)}</span>
       </div>
       <div className="progress blue"><div style={{ width: `${progress * 100}%` }} /></div>
+      <div className="row-buttons">
+        <button className="btn btn-secondary" onClick={() => store.extendRest(15)} aria-label="Добавить 15 секунд">+15 с</button>
+        <button className="btn btn-secondary" onClick={store.stopRest}>Пропустить</button>
+      </div>
     </div>
   );
 }
@@ -182,14 +182,14 @@ function MoreQuestion({ session }: { session: WorkoutSession }) {
   return (
     <div className="screen">
       <div className="center-screen" style={{ paddingTop: "calc(var(--safe-top) + 24px)" }}>
-        <span style={{ color: "var(--accent)" }}><Icon name="flame" size={56} filled /></span>
+        <span style={{ color: "var(--accent-text)" }}><Icon name="flame" size={56} filled /></span>
         <h1 className="title-xl">Ещё хочешь?</h1>
         <p className="muted">
           Список закончился: {exercisesText(count)} за {durationText(Date.now() - session.startedAt)}.
           Если силы остались — добери упражнения из общего списка.
         </p>
-        <button className="btn btn-primary blue" onClick={() => store.updateSession(S.wantMore)}>Да, хочу ещё</button>
-        <button className="btn btn-primary" onClick={() => store.finishSession()}>Нет, закончить</button>
+        <button className="btn btn-primary" onClick={() => store.updateSession(S.wantMore)}>Да, хочу ещё</button>
+        <button className="btn btn-secondary" onClick={() => store.finishSession()}>Нет, закончить</button>
         <button className="btn-text" onClick={() => store.updateSession(S.previous)}>‹ Вернуться к последнему упражнению</button>
       </div>
     </div>

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { reminderUrl } from "../../lib/calendar";
+import { icsText, scheduleText } from "../../lib/calendar";
 import { cacheVideo, cachedVideoUrls, loadManifest, mediaUrl, removeCachedVideos, storageEstimate } from "../../lib/platform";
 import * as store from "../../lib/store";
 import { useStore } from "../../lib/store";
@@ -68,6 +68,31 @@ export function Settings() {
 
 function Reminders() {
   const settings = useStore((s) => s.settings);
+  const [status, setStatus] = useState<string | null>(null);
+
+  // Приложение при этом никуда не уходит: файл готовится на телефоне и отдаётся системе.
+  const addToCalendar = async () => {
+    setStatus(null);
+    const file = new File([icsText(settings)], "trenazher.ics", { type: "text/calendar" });
+    try {
+      if (navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file], title: "Напоминание о тренировке" });
+        setStatus("В появившемся окне выберите «Календарь» — событие повторится каждую неделю.");
+        return;
+      }
+    } catch (error) {
+      if ((error as Error).name === "AbortError") return;
+    }
+    const url = URL.createObjectURL(file);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "trenazher.ics";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    setStatus("Файл напоминания сохранён. Откройте его — iPhone предложит добавить событие в Календарь.");
+  };
   const toggleDay = (day: number) => {
     const days = settings.reminderWeekdays.includes(day)
       ? settings.reminderWeekdays.filter((d) => d !== day)
@@ -92,12 +117,15 @@ function Reminders() {
         })}
       </div>
       {settings.reminderWeekdays.length ? (
-        // Открывается в Safari: там iPhone показывает системное «Добавить в Календарь».
-        <a className="btn btn-secondary" style={{ textDecoration: "none", color: "var(--text)" }} href={reminderUrl(settings)} target="_blank" rel="noopener">
+        <button className="btn btn-secondary" onClick={() => void addToCalendar()}>
           <Icon name="calendar" /> Добавить в Календарь
-        </a>
+        </button>
       ) : <div className="small warn">Выберите хотя бы один день.</div>}
-      <div className="tiny faint">Поменяли время или дни — добавьте событие заново, а старое удалите в Календаре.</div>
+      {status ? <div className="small" role="status">{status}</div> : null}
+      <div className="tiny faint">
+        Поменяли время или дни — добавьте событие заново, а старое удалите в Календаре.
+        Если окно не появилось, поставьте напоминание вручную — {scheduleText(settings)}.
+      </div>
     </Section>
   );
 }

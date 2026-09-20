@@ -6,7 +6,7 @@
 
 1. `docs/HANDOFF.md` — состояние, сервер, частые проблемы.
 2. `docs/CHANGELOG.md` — что и почему уже решено. Принятые решения без нового повода не пересматривать: веб вместо нативной версии, без платного Apple Developer.
-3. Для любых изменений интерфейса — `docs/PRODUCT_USABILITY_PROFILE.md` и стандарт `docs/USABILITY_STANDARD.md`.
+3. Для любых изменений интерфейса — `docs/PRODUCT_USABILITY_PROFILE.md` и стандарт `docs/USABILITY_STANDARD.md`; цвета, шрифты и визуальные приёмы — `design-system/trenazher/MASTER.md` (там же сказано, что из рекомендаций скилла принято, а что заменено).
 
 ## Стек и команды
 
@@ -28,6 +28,26 @@
 - У каждого прямого действия пользователя есть обратное (стандарт §4). Сбой не должен оставлять пустой экран.
 - Сервер общий с другими сайтами: трогаем только своё (`/var/www/trenazher`, `/opt/trenazher`, `/var/lib/trenazher`, `sites-available/trenazher`), `nginx -t` перед `reload`.
 - Не качать с Drive массово в обход паузы в `sync.py` — Google временно блокирует сервер.
+
+## Agent skills
+
+Настройка инженерных скиллов (набор mattpocock/skills, стоят в `~/.claude/skills/`). Что для чего — `/ask-matt`.
+
+### Issue tracker
+
+Задачи и спеки — GitHub Issues репозитория `1311-barik/trenazher`, через `gh`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Пять стандартных ролей без переименований: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: один `CONTEXT.md` и `docs/adr/` в корне; создаются по мере надобности через `/domain-modeling`. See `docs/agents/domain.md`.
+
+### Usability standard
+
+Поведение интерфейса подчиняется стандарту юзабилити. See `docs/agents/usability.md`.
 
 ## После работы
 

@@ -34,3 +34,43 @@ export function reminderQuery(settings: Settings, now = new Date()): string {
 }
 
 export const reminderUrl = (settings: Settings, now = new Date()) => `reminder.ics?${reminderQuery(settings, now)}`;
+
+/** Текст файла напоминания. Делаем его на телефоне, чтобы приложение никуда не уходило:
+ *  переход на .ics в режиме «с экрана Домой» оставлял белый экран без выхода. */
+export function icsText(settings: Settings, now = new Date()): string {
+  const start = firstOccurrence(settings, now);
+  const end = new Date(start.getTime() + 60 * 60 * 1000);
+  const days = [...settings.reminderWeekdays].sort((a, b) => a - b).map((d) => DAY_CODES[d - 1]).join(",");
+  return [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Trenazher//RU",
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH",
+    "BEGIN:VEVENT",
+    `UID:trenazher-${floating(start)}@trenazher`,
+    `DTSTAMP:${floating(now)}Z`,
+    `DTSTART:${floating(start)}`,
+    `DTEND:${floating(end)}`,
+    `RRULE:FREQ=WEEKLY;BYDAY=${days}`,
+    "SUMMARY:Тренировка",
+    "DESCRIPTION:Открой Тренажёр и выбери тренировку.",
+    "BEGIN:VALARM",
+    "ACTION:DISPLAY",
+    "DESCRIPTION:Время тренировки",
+    "TRIGGER:-PT0M",
+    "END:VALARM",
+    "END:VEVENT",
+    "END:VCALENDAR",
+    "",
+  ].join("\r\n");
+}
+
+const WEEKDAY_NAMES = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"];
+
+/** Человеческое описание расписания — для подсказки «поставить вручную». */
+export function scheduleText(settings: Settings): string {
+  const days = [...settings.reminderWeekdays].sort((a, b) => a - b).map((d) => WEEKDAY_NAMES[d - 1]).join(", ");
+  const time = `${String(settings.reminderHour).padStart(2, "0")}:${String(settings.reminderMinute).padStart(2, "0")}`;
+  return `${days || "дни не выбраны"} в ${time}`;
+}

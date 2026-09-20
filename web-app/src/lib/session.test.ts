@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { firstOccurrence, reminderQuery } from "./calendar";
+import { firstOccurrence, icsText, reminderQuery, scheduleText } from "./calendar";
 import * as S from "./session";
 import * as store from "./store";
 import { plural } from "./text";
@@ -113,6 +113,15 @@ describe("хранилище", () => {
     expect(store.getState().history).toEqual([entry]);
   });
 
+  it("после начала тренировки выбор сбрасывается — следующая собирается с нуля", () => {
+    // Наблюдение Жени 2026-09-20: новая тренировка открывалась с отметками предыдущей.
+    store.toggleDraftPart("Руки");
+    store.toggleDraftExercise("руки/молот");
+    expect(store.startCustom()).toBe(true);
+    expect(store.getState().draft).toEqual({ bodyParts: [], exerciseIds: [] });
+    expect(store.getState().session?.queue).toEqual(["руки/молот"]);
+  });
+
   it("резервная копия объединяется без дублей", () => {
     store.addHistory({ id: "h1", startedAt: 0, finishedAt: 1, kind: "custom", title: "Руки", bodyParts: [], exerciseIds: ["x"], exerciseNames: ["X"] });
     const backup = store.exportBackup();
@@ -138,6 +147,16 @@ describe("напоминание в календарь", () => {
     const first = firstOccurrence({ ...defaultSettings, reminderWeekdays: [1, 3, 5] }, now);
     expect([first.getDate(), first.getHours()]).toEqual([21, 19]);
     expect(reminderQuery(defaultSettings, now)).toBe("days=MO,WE,FR&start=20260921T190000&end=20260921T200000");
+  });
+
+  it("файл напоминания содержит повтор, время и будильник", () => {
+    const now = new Date(2026, 8, 18, 20, 0);
+    const text = icsText({ ...defaultSettings, reminderWeekdays: [1, 3, 5] }, now);
+    expect(text).toContain("RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR");
+    expect(text).toContain("DTSTART:20260921T190000");
+    expect(text).toContain("BEGIN:VALARM");
+    expect(text.split("\r\n")[0]).toBe("BEGIN:VCALENDAR");
+    expect(scheduleText({ ...defaultSettings, reminderWeekdays: [1, 5] })).toBe("понедельник, пятница в 19:00");
   });
 
   it("склонения", () => {

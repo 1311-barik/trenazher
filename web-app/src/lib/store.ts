@@ -289,6 +289,10 @@ export function startCustom(): boolean {
   if (ids.length === 0) return false;
   const parts = state.draft.bodyParts;
   begin(S.createSession({ kind: "custom", title: parts.length ? parts.join(" + ") : "Своя тренировка", bodyParts: parts, exerciseIds: ids }));
+  // Черновик нужен, пока тренировку собирают: вышел с экрана — выбор не потерялся.
+  // Как только тренировка началась, выбор «израсходован»: следующая собирается с нуля.
+  // Повторить прежний набор можно из Истории — «Повторить эту тренировку».
+  resetDraft();
   return true;
 }
 

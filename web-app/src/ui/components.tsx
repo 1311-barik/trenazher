@@ -200,7 +200,7 @@ export function VideoList({ videos }: { videos: MediaItem[] }) {
                 <span className="play"><Icon name="play" size={18} filled /></span>
               </div>
               <div className="grow" style={{ minWidth: 0 }}>
-                <div className="tiny" style={{ fontWeight: 800, color: v.kind === "ownVideo" ? "var(--accent)" : "var(--blue)" }}>
+                <div className="tiny" style={{ fontWeight: 800, color: v.kind === "ownVideo" ? "var(--accent-text)" : "var(--blue)" }}>
                   {v.kind === "ownVideo" ? "Видео Жени" : "Обучающее видео"}
                 </div>
                 <div className="small" style={{ fontWeight: 650 }}>{v.title}</div>

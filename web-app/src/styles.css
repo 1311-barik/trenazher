@@ -1,14 +1,20 @@
-/* Цвета «Московское Динамо» — как в нативной версии (ios-app/.../UI/Theme.swift). */
+/* Синяя база из ТЗ («Московское Динамо»), акцент — золото, как на сайтах Александра.
+   Все пары «текст на фоне» проверены: обычный текст ≥ 4.5:1, границы и кольцо фокуса ≥ 3:1. */
 :root {
   --bg-top: #06142f;
   --bg-bottom: #0c2966;
   --card: #12306b;
   --card-raised: #1a3d82;
-  --stroke: #2c58ac;
-  --accent: #e3222d;
-  --blue: #3d7bf0;
+  --stroke: #4576cc;
+  --accent: #f0b429;        /* золотая заливка главного действия */
+  --accent-text: #ffd166;   /* то же золото как текст и иконка на тёмном */
+  --on-accent: #06142f;     /* текст на золоте */
+  --blue: #3d7bf0;          /* ссылки и второстепенные акценты */
+  --blue-fill: #2f63d6;     /* заливка синей кнопки под белый текст */
+  --green-fill: #3fd08a;
+  --danger: #ff7a7f;        /* только необратимое и сбои */
   --success: #3fd08a;
-  --warning: #f5b342;
+  --warning: #ffd166;
   --text: #ffffff;
   --text-2: #b9c8ee;
   --text-3: #8c9dcc;
@@ -41,6 +47,10 @@ body {
 }
 
 button { font: inherit; color: inherit; touch-action: manipulation; -webkit-user-select: none; user-select: none; }
+
+/* Кольцо фокуса — снаружи элемента, поэтому читается и на золотой кнопке. */
+:focus-visible { outline: 3px solid var(--accent-text); outline-offset: 2px; border-radius: 4px; }
+.btn:focus-visible, .btn-icon:focus-visible, .btn-pill:focus-visible, .tappable:focus-visible { border-radius: 14px; }
 img { display: block; }
 a { color: var(--blue); }
 
@@ -81,13 +91,13 @@ a { color: var(--blue); }
 }
 .btn:active { opacity: 0.8; }
 .btn:disabled { opacity: 0.55; cursor: default; }
-.btn-primary { background: var(--accent); color: #fff; }
-.btn-primary.blue { background: var(--blue); }
-.btn-primary.green { background: #2aa56b; }
-.btn-primary:disabled { background: var(--card); }
+.btn-primary { background: var(--accent); color: var(--on-accent); }
+.btn-primary.blue { background: var(--blue-fill); color: #fff; }
+.btn-primary.green { background: var(--green-fill); color: var(--on-accent); }
+.btn-primary:disabled { background: var(--card); color: var(--text-2); }
 .btn-secondary { background: var(--card-raised); border-color: var(--stroke); }
 .btn-text { background: none; border: none; color: var(--text-2); font-weight: 600; min-height: var(--tap); padding: 0 8px; cursor: pointer; }
-.btn-text.accent { color: var(--accent); }
+.btn-text.accent { color: var(--accent-text); }
 .btn-text.blue { color: var(--blue); }
 .btn-icon {
   flex: none; width: var(--tap); height: var(--tap); border-radius: 50%;
@@ -95,7 +105,7 @@ a { color: var(--blue); }
   background: var(--card-raised); border: none; cursor: pointer;
 }
 .btn-icon.plain { background: none; }
-.btn-icon.on { color: var(--accent); }
+.btn-icon.on { color: var(--accent-text); }
 .btn-pill { min-height: var(--tap); padding: 0 14px; border-radius: 22px; border: none; background: var(--card-raised); font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
 .row-buttons { display: flex; gap: 10px; }
 
@@ -114,7 +124,7 @@ a { color: var(--blue); }
 .faint { color: var(--text-3); }
 .small { font-size: 0.85rem; }
 .tiny { font-size: 0.75rem; }
-.warn { color: var(--warning); }
+.warn { color: var(--danger); }
 .ok { color: var(--success); }
 .pre { white-space: pre-wrap; line-height: 1.45; }
 .section-title { display: flex; justify-content: space-between; align-items: baseline; margin: 6px 0 0; }
@@ -122,6 +132,8 @@ a { color: var(--blue); }
 
 .main-action { display: flex; align-items: center; gap: 16px; padding: 18px; min-height: 104px; background: var(--card-raised); border: 1px solid var(--stroke); border-radius: var(--radius); color: var(--text); }
 .main-action .badge { width: 56px; height: 56px; border-radius: 14px; display: flex; align-items: center; justify-content: center; flex: none; color: #fff; }
+.main-action .badge.gold { background: var(--accent); color: var(--on-accent); }
+.main-action .badge.blue { background: var(--blue-fill); color: #fff; }
 .main-action .text { flex: 1; }
 .tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .tile { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 84px; background: var(--card); border: 1px solid var(--stroke); border-radius: var(--radius); color: var(--text); padding: 8px; cursor: pointer; }
@@ -181,16 +193,18 @@ a { color: var(--blue); }
 .sets { display: flex; align-items: center; gap: 6px; font-weight: 700; }
 .sets i { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--text-3); }
 .sets i.done { background: var(--success); border-color: var(--success); }
-.rest-digits { font-size: 3rem; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1; }
+.rest { display: flex; flex-direction: column; gap: 10px; }
+.rest-top { display: flex; align-items: baseline; gap: 10px; }
+.rest-digits { font-size: 2.6rem; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1; }
 .menu { position: absolute; right: var(--pad); top: calc(var(--safe-top) + 56px); z-index: 20; min-width: 250px; padding: 6px; }
 .menu button { display: block; width: 100%; text-align: left; padding: 12px; min-height: var(--tap); background: none; border: none; border-radius: 10px; cursor: pointer; }
 .menu button:active { background: var(--card-raised); }
-.menu .danger { color: var(--accent); }
+.menu .danger { color: var(--danger); }
 
 .center-screen { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 18px; padding: 24px; max-width: 520px; margin: 0 auto; }
 .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; width: 100%; }
 .stat { padding: 16px 8px; text-align: center; }
-.stat b { display: block; font-size: 1.6rem; }
+.stat b { display: block; font-size: 1.6rem; font-variant-numeric: tabular-nums; }
 
 /* --- Прочее --- */
 .empty { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; padding: 24px; }
