@@ -93,12 +93,15 @@ class MediaTests(unittest.TestCase):
         self.assertEqual([p["title"] for p in by_name["Мертвый жук"]["photos"]], ["Пресс. Мертвый жук"])
         self.assertEqual([v["kind"] for v in by_name["Мертвый жук"]["videos"]], ["ownVideo", "otherVideo"])
         self.assertEqual([p["title"] for p in by_name["Молот"]["photos"]], ["Бицепс. Молот", "Бицепс. Молот 2"])
-        self.assertEqual(by_name["Классика подъем гантели со сгибанием локтя"]["photos"], [])
-        self.assertTrue(any("«Шраги с гантелями», колонка «Фото»" in i["message"] and "«Спина. Шраги»" in i["message"]
-                            for i in manifest["issues"]))
+        # Ячейка «есть» + однозначный файл, названный по-своему — привязывается и объясняется в отчёте.
+        self.assertEqual([p["title"] for p in by_name["Классика подъем гантели со сгибанием локтя"]["photos"]],
+                         ["Бицепс. Классика"])
+        self.assertEqual([p["title"] for p in by_name["Шраги с гантелями"]["photos"]], ["Спина. Шраги"])
+        self.assertTrue(any("«Шраги с гантелями», колонка «Фото»" in i["message"] and "подобран файл «Спина. Шраги»"
+                            in i["message"] and i["severity"] == "info" for i in manifest["issues"]))
         # Те же ID, что в нативной версии: избранное и история совместимы.
         self.assertIn("руки/молот", {e["id"] for e in manifest["exercises"]})
-        self.assertEqual(sum(1 for i in manifest["issues"] if i["severity"] == "warning"), 66)
+        self.assertEqual(sum(1 for i in manifest["issues"] if i["severity"] == "warning"), 43)
 
     def test_version_changes_when_file_replaced(self):
         rows = [["Часть тела", "Упражнение"], ["Руки", "Молот"]]
@@ -106,6 +109,30 @@ class MediaTests(unittest.TestCase):
         new = build_manifest(Snapshot(rows, photos=[DriveFile("1", "Руки. Молот.jpg", md5="bbb")]))
         self.assertEqual(old["exercises"][0]["id"], new["exercises"][0]["id"])
         self.assertNotEqual(old["contentVersion"], new["contentVersion"])
+
+
+class ConfidentMatchTests(unittest.TestCase):
+    """Ячейка «есть» + файл, названный по-своему: привязка только при однозначности с обеих сторон."""
+
+    def setUp(self):
+        self.manifest = build_manifest(real_snapshot())
+        self.by_name = {e["name"]: e for e in self.manifest["exercises"]}
+
+    def test_short_file_name_is_bound(self):
+        classic = self.by_name["Классика подъем гантели со сгибанием локтя"]
+        self.assertEqual([m["title"] for m in classic["photos"]], ["Бицепс. Классика"])
+        picked = next(i["message"] for i in self.manifest["issues"]
+                      if "подобран файл «Бицепс. Классика»" in i["message"])
+        self.assertIn("впишите в ячейку нужное имя", picked)
+
+    def test_file_fitting_two_exercises_is_not_bound(self):
+        """«Бицепс. Молот» подходит и «Молоту», и «Диагональному молоту» — значит никому."""
+        titles = [m["title"] for m in self.by_name["Диагональный молот"]["videos"]]
+        self.assertNotIn("Бицепс. Молот", titles)
+
+    def test_ambiguous_cell_still_asks_to_fill_in(self):
+        self.assertTrue(any("написано «есть», но файл с таким названием не найден" in i["message"]
+                            for i in self.manifest["issues"]))
 
 
 class WorkoutTests(unittest.TestCase):
@@ -117,6 +144,40 @@ class WorkoutTests(unittest.TestCase):
         self.assertEqual(manifest["workouts"][0]["exerciseIds"], ["руки/молот", "живот/мертвый жук"])
         self.assertTrue(any("«Несуществующее» не найдено" in i["message"] for i in manifest["issues"]))
         self.assertIn("Руки и пресс", report_markdown(manifest))
+
+    def test_workout_blocks_as_zhenya_keeps_them(self):
+        """Реальная раскладка листа «тренировки»: название в кавычках, ниже раздел,
+        своё название упражнения и точное название из главного списка в третьей колонке."""
+        manifest = build_manifest(real_snapshot([
+            ['Тренировка "Как за каменной спиной+"'],
+            ["", "", "Ссылка на главный список"],
+            ["Спина", "Вокруг света"],
+            ["", "Пуловер лежа", "Пуловер с гантелью лёжа на полу"],
+            [],
+            ["Пресс", "Мертвый жук"],
+            ["", "Планка с перекладыванием гантели между руками"],
+            [],
+            [],
+            ['Тренировка "Пресс-аташе" '],
+            ["Руки", "Бицепс. Молот"],
+        ]))
+        titles = [w["title"] for w in manifest["workouts"]]
+        self.assertEqual(titles, ["Как за каменной спиной+", "Пресс-аташе"])
+        self.assertEqual(manifest["workouts"][0]["exerciseIds"],
+                         ["спина/вокруг света", "смесь мышц/пуловер с гантелью лежа на полу", "живот/мертвый жук"])
+        # «Бицепс. Молот» — группа мышц перед названием, а не раздел.
+        self.assertEqual(manifest["workouts"][1]["exerciseIds"], ["руки/молот"])
+        # Ненайденное упражнение объясняет, куда вписать точное название, и предлагает похожие.
+        missing = next(i["message"] for i in manifest["issues"]
+                       if "Планка с перекладыванием гантели между руками" in i["message"])
+        self.assertIn("Ссылка на главный список", missing)
+        self.assertIn("Похоже на:", missing)
+        self.assertTrue(any("показана не полностью" in i["message"] for i in manifest["issues"]))
+
+    def test_workout_sheet_without_recognisable_layout(self):
+        manifest = build_manifest(real_snapshot([["что-то своё"], ["и ещё"]]))
+        self.assertEqual(manifest["workouts"], [])
+        self.assertTrue(any("не удалось разобрать ни одной тренировки" in i["message"] for i in manifest["issues"]))
 
     def test_plural(self):
         self.assertEqual([plural(n, "а", "б", "в") for n in (1, 3, 5, 11, 22)], ["а", "б", "в", "в", "б"])

@@ -9,7 +9,7 @@ import os
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Sequence, Set, Tuple
+from typing import Dict, List, NamedTuple, Optional, Sequence, Set, Tuple
 
 SCHEMA_VERSION = 1
 
@@ -216,15 +216,66 @@ def parse_exercise_sheet(rows: Sequence[Sequence[str]]) -> Tuple[List[ExerciseRo
 # Лист «Тренировки»
 
 
+class WorkoutEntry(NamedTuple):
+    row_number: int
+    name: str
+    section: Optional[str]  # раздел, под которым упражнение стоит в тренировке
+
+
 @dataclass
 class WorkoutRow:
     title: str
     summary: Optional[str]
-    exercises: List[Tuple[int, str]] = field(default_factory=list)
+    exercises: List[WorkoutEntry] = field(default_factory=list)
+
+
+TITLE_PREFIX = re.compile(r"^\s*трениров\w*", re.IGNORECASE)
+QUOTED = re.compile(r"[«\"\u201c\u2018\']\s*(.+?)\s*[»\"\u201d\u2019\']")
+LEGEND_KEYS = ("ссылка на главный список", "главный список")
+
+
+def workout_title(cell: str) -> Optional[str]:
+    """«Тренировка "Пресс-аташе"» → «Пресс-аташе». Пустое название — не заголовок тренировки."""
+    if not TITLE_PREFIX.match(cell):
+        return None
+    quoted = QUOTED.search(cell)
+    if quoted:
+        return display_name(quoted.group(1))
+    rest = TITLE_PREFIX.sub("", cell, count=1).strip(" :—-–\t")
+    return display_name(rest) or None
+
+
+def parse_workout_blocks(rows: Sequence[Sequence[str]]) -> List[WorkoutRow]:
+    """Раскладка блоками, как её ведёт Женя: строка «Тренировка "…"», ниже — раздел,
+    название упражнения по-своему и точное название из главного списка в третьей колонке."""
+    workouts: List[WorkoutRow] = []
+    section: Optional[str] = None
+    for index, row in enumerate(rows):
+        cells = [cell.strip() for cell in row]
+        if not any(cells):
+            continue
+        title = workout_title(cells[0]) if cells[0] else None
+        if title:
+            workouts.append(WorkoutRow(title=title, summary=None))
+            section = None
+            continue
+        if any(key in text_key(cell) for cell in cells for key in LEGEND_KEYS):
+            continue
+        if not workouts:
+            continue
+        first = cells[0] if cells else ""
+        own = cells[1] if len(cells) > 1 else ""
+        exact = cells[2] if len(cells) > 2 else ""
+        if first and (own or exact):
+            section = first
+        name = display_name(exact or own or first)
+        if name:
+            workouts[-1].exercises.append(WorkoutEntry(index + 1, name, non_empty(section or "")))
+    return workouts
 
 
 def parse_workout_sheet(rows: Sequence[Sequence[str]]) -> Tuple[List[WorkoutRow], List[Dict[str, str]]]:
-    """Колонки «Тренировка», «Описание», «Упражнение»; название — только в первой строке тренировки."""
+    """Две раскладки: таблица с заголовками «Тренировка»/«Упражнение» и блоки Жени."""
     title_col = summary_col = exercise_col = header = None
     for index, row in enumerate(rows[:10]):
         title_col = summary_col = exercise_col = None
@@ -242,10 +293,14 @@ def parse_workout_sheet(rows: Sequence[Sequence[str]]) -> Tuple[List[WorkoutRow]
 
     if header is None:
         has_content = any(cell.strip() for row in rows for cell in row)
-        if has_content:
-            return [], [issue("warning", "Лист «Тренировки»: не найдены заголовки «Тренировка» и «Упражнение» — "
-                                         "готовые тренировки не загружены.")]
-        return [], []
+        if not has_content:
+            return [], []
+        blocks = parse_workout_blocks(rows)
+        if blocks:
+            return blocks, []
+        return [], [issue("warning", "Лист «Тренировки»: не удалось разобрать ни одной тренировки. Нужна либо строка "
+                                     "заголовков «Тренировка» и «Упражнение», либо строка «Тренировка \"Название\"» "
+                                     "и список упражнений под ней.")]
 
     workouts: List[WorkoutRow] = []
     for index in range(header + 1, len(rows)):
@@ -264,7 +319,7 @@ def parse_workout_sheet(rows: Sequence[Sequence[str]]) -> Tuple[List[WorkoutRow]
             workouts[-1].summary = summary
         exercise = display_name(cell(exercise_col))
         if exercise and workouts:
-            workouts[-1].exercises.append((index + 1, exercise))
+            workouts[-1].exercises.append(WorkoutEntry(index + 1, exercise, None))
     return workouts, []
 
 
@@ -422,6 +477,30 @@ class MediaMatcher:
             return ("ambiguous", partial)
         return ("not_found", None)
 
+    def fits_section(self, f: DriveFile, row: "ExerciseRow") -> bool:
+        """Файл назван «Группа мышц. Короткое название» (так их ведёт автор контента).
+        Подходит упражнению, если приставка — его раздел или группа мышц, а все значимые
+        слова названия файла есть в названии упражнения."""
+        segments = [s.strip() for s in f.base_name.split(".") if s.strip()]
+        if len(segments) < 2:
+            return False
+        prefix, rest = segments[0], " ".join(segments[1:])
+        if text_key(prefix) not in (text_key(row.body_part), text_key(row.muscle_group or "")):
+            return False
+        rest_stems = stems(rest)
+        return bool(rest_stems) and rest_stems <= stems(row.name)
+
+    def confident_match(self, row: "ExerciseRow", rows: Sequence["ExerciseRow"]) -> Optional[DriveFile]:
+        """Для ячейки «есть»: файл привязывается, только если он единственный подходящий
+        и сам подходит единственному упражнению. Однозначность с обеих сторон — иначе
+        «Бицепс. Молот» уехал бы и в «Молот», и в «Диагональный молот» (стандарт §8.7)."""
+        found = [f for f in self.files if self.fits_section(f, row)]
+        if len(found) != 1:
+            return None
+        if sum(1 for other in rows if self.fits_section(found[0], other)) > 1:
+            return None
+        return found[0]
+
     def suggestions(self, exercise_name: str, limit: int = 2) -> List[DriveFile]:
         """Похожие файлы — только подсказка человеку, автоматически не привязываются."""
         target = stems(exercise_name)
@@ -478,7 +557,8 @@ def _describe(reference: Tuple[str, str]) -> str:
     return f"ссылка …{value[-6:]}" if kind == "id" else value
 
 
-def _resolve_cell(cell: str, kind: str, row: ExerciseRow, matcher: MediaMatcher, issues: List[Dict[str, str]]) -> List[DriveFile]:
+def _resolve_cell(cell: str, kind: str, row: ExerciseRow, matcher: MediaMatcher, issues: List[Dict[str, str]],
+                  rows: Sequence[ExerciseRow] = ()) -> List[DriveFile]:
     place = f"Строка {row.row_number}, «{row.name}», колонка «{COLUMN_TITLES[kind]}»"
     directive = parse_media_cell(cell)
     if directive[0] == "none":
@@ -486,6 +566,12 @@ def _resolve_cell(cell: str, kind: str, row: ExerciseRow, matcher: MediaMatcher,
     if directive[0] == "auto":
         found = matcher.auto_matches(row.name)
         if not found and directive[1]:
+            picked = matcher.confident_match(row, rows)
+            if picked is not None:
+                issues.append(issue("info", f"{place}: по ячейке «есть» подобран файл «{picked.base_name}» — "
+                                            "совпали группа мышц и слова названия. Если это не тот файл, "
+                                            "впишите в ячейку нужное имя."))
+                return [picked]
             hint = " или ".join(f"«{f.base_name}»" for f in matcher.suggestions(row.name))
             suggestion = f" Возможно, подходит: {hint}." if hint else ""
             issues.append(issue("warning", f"{place}: написано «есть», но файл с таким названием не найден.{suggestion} "
@@ -528,7 +614,7 @@ def build_manifest(snapshot: Snapshot, now: Optional[datetime] = None) -> Dict:
         cells = {"photo": row.photo_cell, "ownVideo": row.own_video_cell, "otherVideo": row.other_video_cell}
         media: Dict[str, List[Dict]] = {}
         for kind in ("photo", "ownVideo", "otherVideo"):
-            files = _resolve_cell(cells[kind], kind, row, matchers[kind], issues)
+            files = _resolve_cell(cells[kind], kind, row, matchers[kind], issues, rows)
             used_ids.update(f.id for f in files)
             media[kind] = [media_item(f, kind) for f in files]
 
@@ -578,32 +664,64 @@ def _build_workouts(rows: List[List[str]], exercises: List[Dict], issues: List[D
     for exercise in exercises:
         by_name.setdefault(text_key(exercise["name"]), []).append(exercise)
 
-    def lookup(name: str) -> Optional[Dict]:
+    def lookup(name: str, section: Optional[str]) -> Optional[Dict]:
         found = by_name.get(text_key(name))
         if found:
+            if len(found) > 1 and section:
+                for exercise in found:
+                    if text_key(exercise["bodyPart"]) == text_key(section):
+                        return exercise
             return found[0]
         parts = [p.strip() for p in name.split(".") if p.strip()]
         if len(parts) < 2:
             return None
-        part, exercise_name = text_key(parts[0]), text_key(" ".join(parts[1:]))
+        # «Бицепс. Молот» — раздел или группа мышц перед названием.
+        prefix, exercise_name = text_key(parts[0]), text_key(" ".join(parts[1:]))
         for exercise in exercises:
-            if text_key(exercise["bodyPart"]) == part and text_key(exercise["name"]) == exercise_name:
+            if text_key(exercise["name"]) != exercise_name:
+                continue
+            if prefix in (text_key(exercise["bodyPart"]), text_key(exercise["muscleGroup"] or "")):
                 return exercise
         return None
+
+    def suggestions(name: str) -> List[str]:
+        """Похожие названия из главного списка — подсказка Жене, не автопривязка (§8.7 стандарта)."""
+        wanted = stems(name)
+        if not wanted:
+            return []
+        scored = []
+        for exercise in exercises:
+            overlap = len(wanted & stems(exercise["name"]))
+            if overlap:
+                scored.append((overlap, exercise["name"]))
+        scored.sort(key=lambda pair: (-pair[0], pair[1]))
+        return [n for _, n in scored[:3]]
 
     workouts: List[Dict] = []
     taken: Set[str] = set()
     for row in parsed:
         ids = []
-        for row_number, name in row.exercises:
-            exercise = lookup(name)
+        missing = 0
+        for row_number, name, section in row.exercises:
+            exercise = lookup(name, section)
             if exercise:
-                ids.append(exercise["id"])
-            else:
-                issues.append(issue("warning", f"Лист «Тренировки», строка {row_number}: упражнение «{name}» не найдено в таблице упражнений."))
+                if exercise["id"] not in ids:
+                    ids.append(exercise["id"])
+                continue
+            missing += 1
+            similar = suggestions(name)
+            hint = (" Похоже на: " + "; ".join(f"«{s}»" for s in similar) + ".") if similar else ""
+            issues.append(issue("warning", f"Тренировка «{row.title}», строка {row_number}: упражнение «{name}» не найдено "
+                                           f"в главном списке. Впишите точное название из главного списка в третью колонку "
+                                           f"(«Ссылка на главный список»).{hint}"))
         if not ids:
             issues.append(issue("warning", f"Тренировка «{row.title}» пропущена: в ней нет ни одного найденного упражнения."))
             continue
+        if missing:
+            total = len(ids) + missing
+            issues.append(issue("warning", f"Тренировка «{row.title}» показана не полностью: найдено "
+                                           f"{len(ids)} {plural(len(ids), 'упражнение', 'упражнения', 'упражнений')} "
+                                           f"из {total}. Остальные появятся, когда названия совпадут."))
         workout_id = f"workout/{text_key(row.title)}"
         if workout_id in taken:
             issues.append(issue("warning", f"Тренировка «{row.title}» встречается дважды — названия должны отличаться."))
