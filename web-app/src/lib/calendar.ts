@@ -1,8 +1,8 @@
 import type { Settings } from "./types";
 
 // Напоминания без сервера рассылок: повторяющееся событие в Календаре iPhone.
-// Сервер (nginx, см. deploy/trenazher.nginx) отдаёт .ics по параметрам ссылки —
-// Safari показывает системное окно «Добавить в Календарь».
+// Файл .ics собирается прямо в приложении и отдаётся через «Поделиться» —
+// переход по ссылке уводил бы из приложения, запущенного с экрана «Домой».
 
 const DAY_CODES = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"]; // 1 … 7
 
@@ -26,14 +26,7 @@ export function firstOccurrence(settings: Settings, now = new Date()): Date {
   throw new Error("Не выбрано ни одного дня");
 }
 
-export function reminderQuery(settings: Settings, now = new Date()): string {
-  const start = firstOccurrence(settings, now);
-  const end = new Date(start.getTime() + 60 * 60 * 1000);
-  const days = [...settings.reminderWeekdays].sort((a, b) => a - b).map((d) => DAY_CODES[d - 1]).join(",");
-  return `days=${days}&start=${floating(start)}&end=${floating(end)}`;
-}
 
-export const reminderUrl = (settings: Settings, now = new Date()) => `reminder.ics?${reminderQuery(settings, now)}`;
 
 /** Текст файла напоминания. Делаем его на телефоне, чтобы приложение никуда не уходило:
  *  переход на .ics в режиме «с экрана Домой» оставлял белый экран без выхода. */

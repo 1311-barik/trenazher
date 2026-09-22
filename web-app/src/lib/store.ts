@@ -322,12 +322,15 @@ export function finishSession(): HistoryEntry | null {
   const { byId } = contentIndex(state.content.manifest);
   const entry = S.historyEntry(session, (id) => byId.get(id)?.name);
   if (entry) addHistory(entry);
+  else showToast("Тренировка закрыта без записи: ни одного подхода не отмечено");
   setState({ session: null, finished: entry, rest: null });
+  resetDraft(); // выбор при доборе, если он был, больше не нужен
   return entry;
 }
 
 export function discardSession(): void {
   setState({ session: null, finished: null, rest: null });
+  resetDraft();
 }
 
 export function closeFinished(): void {
@@ -375,19 +378,31 @@ export function exportBackup(): Backup {
   return { app: "trenazher", version: 1, exportedAt: Date.now(), favorites: state.favorites, history: state.history, settings: state.settings };
 }
 
-/** Объединяет копию с текущими данными: ничего не удаляет, дубли не создаёт. */
-export function importBackup(data: unknown): { history: number; favorites: number } {
+/** Настройки ещё никто не трогал — на новом устройстве их можно взять из копии. */
+function settingsUntouched(settings: Settings): boolean {
+  return JSON.stringify(settings) === JSON.stringify(defaultSettings);
+}
+
+/** Объединяет копию с текущими данными: ничего не удаляет, дубли не создаёт.
+ *  Настройки берутся из копии только на нетронутом устройстве — иначе перезапись без спроса
+ *  нарушила бы обещание «ничего не удалено». Весь импорт можно отменить одним нажатием. */
+export function importBackup(data: unknown): { history: number; favorites: number; settings: boolean } {
   const backup = data as Partial<Backup>;
   if (!backup || backup.app !== "trenazher" || !Array.isArray(backup.history) || !Array.isArray(backup.favorites)) {
     throw new Error("Это не файл резервной копии Тренажёра.");
   }
+  const before = { history: state.history, favorites: state.favorites, settings: state.settings };
   const historyIds = new Set(state.history.map((h) => h.id));
   const newHistory = backup.history.filter((h) => h && h.id && !historyIds.has(h.id));
   const newFavorites = backup.favorites.filter((f) => f && f.itemId && !isFavorite(state, f.itemId, f.type));
+  const takeSettings = Boolean(backup.settings) && settingsUntouched(state.settings);
   setState({
     history: sortHistory([...state.history, ...newHistory]),
     favorites: [...state.favorites, ...newFavorites],
-    settings: backup.settings ? { ...defaultSettings, ...backup.settings } : state.settings,
+    settings: takeSettings ? { ...defaultSettings, ...backup.settings } : state.settings,
   });
-  return { history: newHistory.length, favorites: newFavorites.length };
+  if (newHistory.length || newFavorites.length || takeSettings) {
+    showToast("Копия восстановлена", "Отменить", () => setState(before));
+  }
+  return { history: newHistory.length, favorites: newFavorites.length, settings: takeSettings };
 }

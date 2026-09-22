@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { firstOccurrence, icsText, reminderQuery, scheduleText } from "./calendar";
+import { firstOccurrence, icsText, scheduleText } from "./calendar";
 import * as S from "./session";
 import * as store from "./store";
 import { plural } from "./text";
@@ -124,11 +124,37 @@ describe("хранилище", () => {
 
   it("резервная копия объединяется без дублей", () => {
     store.addHistory({ id: "h1", startedAt: 0, finishedAt: 1, kind: "custom", title: "Руки", bodyParts: [], exerciseIds: ["x"], exerciseNames: ["X"] });
+    store.updateSettings({ restDurationSeconds: 30 });
     const backup = store.exportBackup();
     store.resetForTests();
-    expect(store.importBackup(backup)).toEqual({ history: 1, favorites: 0 });
-    expect(store.importBackup(backup)).toEqual({ history: 0, favorites: 0 });
+    // Нетронутое устройство — настройки берутся из копии.
+    expect(store.importBackup(backup)).toEqual({ history: 1, favorites: 0, settings: true });
+    expect(store.getState().settings.restDurationSeconds).toBe(30);
+    expect(store.importBackup(backup)).toEqual({ history: 0, favorites: 0, settings: false });
     expect(() => store.importBackup({ foo: 1 })).toThrow();
+  });
+
+  it("копия не перезаписывает настройки, которые уже меняли, и импорт можно отменить", () => {
+    store.addHistory({ id: "h1", startedAt: 0, finishedAt: 1, kind: "custom", title: "Руки", bodyParts: [], exerciseIds: ["x"], exerciseNames: ["X"] });
+    store.updateSettings({ restDurationSeconds: 30 });
+    const backup = store.exportBackup();
+    store.resetForTests();
+    store.updateSettings({ restTimerEnabled: false }); // на этом устройстве настройки уже свои
+    expect(store.importBackup(backup)).toEqual({ history: 1, favorites: 0, settings: false });
+    expect(store.getState().settings.restTimerEnabled).toBe(false);
+    expect(store.getState().settings.restDurationSeconds).toBe(60);
+    // «Отменить» в тосте возвращает всё, как было до импорта.
+    store.getState().toast?.action?.();
+    expect(store.getState().history).toEqual([]);
+  });
+
+  it("завершение без единого подхода не пишет историю и говорит об этом", () => {
+    store.toggleDraftPart("Руки");
+    store.toggleDraftExercise("руки/молот");
+    store.startCustom();
+    expect(store.finishSession()).toBeNull();
+    expect(store.getState().history).toEqual([]);
+    expect(store.getState().toast?.message).toContain("без записи");
   });
 
   it("таймер считает от времени окончания", () => {
@@ -146,7 +172,6 @@ describe("напоминание в календарь", () => {
     const now = new Date(2026, 8, 18, 20, 0);
     const first = firstOccurrence({ ...defaultSettings, reminderWeekdays: [1, 3, 5] }, now);
     expect([first.getDate(), first.getHours()]).toEqual([21, 19]);
-    expect(reminderQuery(defaultSettings, now)).toBe("days=MO,WE,FR&start=20260921T190000&end=20260921T200000");
   });
 
   it("файл напоминания содержит повтор, время и будильник", () => {

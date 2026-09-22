@@ -1,3 +1,4 @@
+import { downloadVideos } from "./offline";
 import { applyManifest, contentFailed, getState, setState } from "./store";
 import type { Manifest, MediaItem } from "./types";
 
@@ -9,10 +10,18 @@ export const mediaUrl = (path: string) => CONTENT_BASE + path;
 const IMAGE_CACHE = "trenazher-images";
 const VIDEO_CACHE = "trenazher-videos";
 
+/** Service worker при недоступном сервере отдаёт манифест из кэша. Отличаем по дате ответа:
+ *  у настоящего ответа заголовок Date свежий, у кэшированного — старый. */
+function servedFromCache(response: Response): boolean {
+  const date = Date.parse(response.headers.get("date") ?? "");
+  return Number.isFinite(date) && Date.now() - date > 60 * 1000;
+}
+
 export async function loadManifest(): Promise<void> {
   try {
     const response = await fetch(`${CONTENT_BASE}manifest.json`, { cache: "no-cache" });
     if (!response.ok) throw new Error(`сервер ответил ${response.status}`);
+    if (servedFromCache(response)) throw new Error("сервер не отвечает");
     const manifest = (await response.json()) as Manifest;
     const current = getState().content.manifest;
     if (!current || current.contentVersion !== manifest.contentVersion || current.generatedAt !== manifest.generatedAt) {
@@ -21,9 +30,40 @@ export async function loadManifest(): Promise<void> {
       applyManifest(current);
     }
     void prefetchImages(manifest);
+    void resumeOfflineVideos(manifest);
   } catch (error) {
     const offline = typeof navigator !== "undefined" && !navigator.onLine;
-    contentFailed(offline ? "Нет интернета — работает всё, что уже загружено." : `Не удалось обновить упражнения: ${(error as Error).message}.`);
+    // Сообщение — человеку: без «Failed to fetch» и кодов (стандарт §10.2).
+    contentFailed(offline ? "Нет интернета — работает всё, что уже загружено." : `Сервер не отвечает (${humanError(error)}) — показываю последнюю загруженную версию.`);
+  }
+}
+
+function humanError(error: unknown): string {
+  const message = (error as Error)?.message ?? "";
+  if (/failed to fetch|load failed|networkerror/i.test(message)) return "нет связи";
+  return message || "ошибка сети";
+}
+
+/** Путь, под которым видео лежит в кэше, — общий для экрана настроек и карточки. */
+export function cachedPath(item: MediaItem): string {
+  return new URL(mediaUrl(item.url), document.baseURI).pathname;
+}
+
+/** ТЗ 5.3: если пользователь просил держать видео офлайн, докачиваем недостающее при следующем запуске сами. */
+let resuming = false;
+export async function resumeOfflineVideos(manifest: Manifest): Promise<void> {
+  if (resuming || !getState().settings.offlineVideos || typeof caches === "undefined" || !navigator.onLine) return;
+  resuming = true;
+  try {
+    const cached = await cachedVideoUrls();
+    const missing: MediaItem[] = [];
+    const seen = new Set<string>();
+    for (const e of manifest.exercises) {
+      for (const v of e.videos) if (v.ready && !seen.has(v.url) && !cached.has(cachedPath(v))) { seen.add(v.url); missing.push(v); }
+    }
+    if (missing.length) await downloadVideos(missing, cacheVideo);
+  } finally {
+    resuming = false;
   }
 }
 
@@ -51,11 +91,6 @@ async function prefetchImages(manifest: Manifest): Promise<void> {
 
 // --- Видео без интернета ---
 
-export async function isVideoCached(item: MediaItem): Promise<boolean> {
-  if (typeof caches === "undefined") return false;
-  const cache = await caches.open(VIDEO_CACHE);
-  return Boolean(await cache.match(mediaUrl(item.url)));
-}
 
 export async function cacheVideo(item: MediaItem): Promise<void> {
   if (typeof caches === "undefined") throw new Error("Браузер не умеет хранить файлы");

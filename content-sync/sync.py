@@ -280,8 +280,10 @@ def process_media(client: Optional[GoogleClient], manifest: Dict, out_dir: str, 
     manifest_path = os.path.join(out_dir, "manifest.json")
 
     for index, item in enumerate(photos + videos):
-        if item is (videos[0] if videos else None):
-            write_json_atomic(manifest_path, decorate(manifest, out_dir))  # фото готовы — показываем
+        photos_done = index == len(photos) and videos
+        if photos_done:
+            # Все фото обработаны — публикуем манифест сразу, не дожидаясь долгого пережатия видео.
+            write_json_atomic(manifest_path, decorate(manifest, out_dir))
         original = os.path.join(originals, f"{media_stem(item)}.{item['fileExtension'] or 'bin'}")
         try:
             if not os.path.exists(original):

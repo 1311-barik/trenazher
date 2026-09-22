@@ -105,6 +105,8 @@ export function History() {
                   <span className="tiny faint" style={{ display: "block" }}>{formatDayTime(entry.finishedAt)}</span>
                   <span style={{ display: "block", fontWeight: 800 }}>{entry.title}</span>
                   <span className="tiny muted">{entry.kind === "ready" ? "Готовая" : "Своя"} · {exercisesText(entry.exerciseIds.length)} · {durationText(entry.finishedAt - entry.startedAt)}</span>
+                  {/* У своей тренировки части тела уже в названии; у готовой — показываем отдельно (ТЗ 4.10). */}
+                  {entry.kind === "ready" && entry.bodyParts.length ? <span className="tiny faint" style={{ display: "block" }}>{entry.bodyParts.join(", ")}</span> : null}
                 </span>
                 <span className="faint"><Icon name="forward" /></span>
               </button>
@@ -119,11 +121,10 @@ export function History() {
 export function HistoryDetail({ id }: { id: string }) {
   const entry = useStore((s) => s.history.find((h) => h.id === id));
   if (!entry) return <Missing back="/history" />;
+  // Удаление обратимо тостом «Отменить» — подтверждение здесь было бы лишним (стандарт §5.4).
   const remove = () => {
-    if (window.confirm("Удалить запись из истории? Сразу после удаления её можно вернуть кнопкой «Отменить».")) {
-      go("/history", true);
-      store.deleteHistory(entry);
-    }
+    go("/history", true);
+    store.deleteHistory(entry);
   };
   return (
     <div className="screen">

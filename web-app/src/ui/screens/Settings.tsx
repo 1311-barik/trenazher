@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { icsText, scheduleText } from "../../lib/calendar";
 import { downloadVideos } from "../../lib/offline";
-import { cacheVideo, cachedVideoUrls, loadManifest, mediaUrl, removeCachedVideos, storageEstimate } from "../../lib/platform";
+import { cacheVideo, cachedPath, cachedVideoUrls, loadManifest, removeCachedVideos, storageEstimate } from "../../lib/platform";
 import * as store from "../../lib/store";
 import { useStore } from "../../lib/store";
 import { megabytes } from "../../lib/text";
@@ -144,8 +144,7 @@ function OfflineVideos() {
   for (const e of manifest?.exercises ?? []) {
     for (const v of e.videos) if (v.ready && !seen.has(v.url)) { seen.add(v.url); videos.push(v); }
   }
-  const pathOf = (v: MediaItem) => new URL(mediaUrl(v.url), document.baseURI).pathname;
-  const missing = videos.filter((v) => !cached.has(pathOf(v)));
+  const missing = videos.filter((v) => !cached.has(cachedPath(v)));
   const missingBytes = missing.reduce((sum, v) => sum + (v.byteSize ?? 0), 0);
 
   const refresh = async () => {
@@ -156,6 +155,7 @@ function OfflineVideos() {
 
   const downloadAll = async () => {
     setError(null);
+    store.updateSettings({ offlineVideos: true }); // дальше недостающее докачается само при запуске
     setProgress({ done: 0, total: missing.length });
     const result = await downloadVideos(missing, cacheVideo, (done, total) => setProgress({ done, total }));
     setProgress(null);
@@ -171,6 +171,7 @@ function OfflineVideos() {
   const removeAll = async () => {
     if (!window.confirm("Удалить скачанные видео? Упражнения и фото останутся, видео можно будет смотреть онлайн или скачать снова.")) return;
     await removeCachedVideos();
+    store.updateSettings({ offlineVideos: false });
     await refresh();
     store.showToast("Скачанные видео удалены");
   };
@@ -216,7 +217,7 @@ function Backup() {
   const importFile = async (file: File) => {
     try {
       const result = store.importBackup(JSON.parse(await file.text()));
-      setMessage(`Восстановлено: тренировок ${result.history}, избранного ${result.favorites}. Ничего не удалено.`);
+      setMessage(`Восстановлено: тренировок ${result.history}, избранного ${result.favorites}${result.settings ? ", настройки" : ""}. Ничего не удалено${result.settings ? "" : ", настройки этого устройства оставлены"}.`);
     } catch (e) {
       setMessage(`Не получилось: ${(e as Error).message}`);
     }

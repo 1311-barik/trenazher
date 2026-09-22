@@ -66,7 +66,7 @@ function ExerciseStep({ session }: { session: WorkoutSession }) {
             <div style={{ fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{session.title}</div>
             <div className="tiny muted">Упражнение {pos.index} из {pos.total}</div>
           </div>
-          <button className="btn-icon" onClick={() => setMenu((v) => !v)} aria-label="Завершить тренировку" aria-expanded={menu}>
+          <button className="btn-icon" onClick={() => setMenu((v) => !v)} aria-label="Меню тренировки" aria-haspopup="menu" aria-expanded={menu}>
             <Icon name="more" />
           </button>
         </div>

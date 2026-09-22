@@ -31,6 +31,7 @@ export function App({ onUpdate }: { onUpdate: () => void }) {
         <div className="card banner" style={{ margin: "calc(var(--safe-top) + 8px) 16px 0" }}>
           <Icon name="download" />
           <div className="grow small">Вышла новая версия приложения.</div>
+          <button className="btn-text" onClick={() => store.setState({ updateAvailable: false })}>Позже</button>
           <button className="btn-text blue" onClick={onUpdate}>Обновить</button>
         </div>
       ) : null}

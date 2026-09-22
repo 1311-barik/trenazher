@@ -141,7 +141,7 @@ export function historyEntry(s: WorkoutSession, names: (id: string) => string | 
   };
 }
 
-/** Оценка для подсказки при выборе: 4–6 минут на упражнение. */
+/** Рекомендация при выборе — подсказка, не лимит (Женя: «рекомендуем 10–12»). */
 export const recommendedRange = { min: 10, max: 12 };
 
 export function estimateText(count: number): string {

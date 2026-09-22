@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { cacheVideo, cachedVideoUrls, mediaUrl } from "../lib/platform";
+import { cacheVideo, cachedPath, cachedVideoUrls, mediaUrl } from "../lib/platform";
 import * as store from "../lib/store";
 import { useStore } from "../lib/store";
 import { exercisesText, formatRelative, megabytes } from "../lib/text";
@@ -127,6 +127,14 @@ export function openVideo(item: MediaItem): void {
 export function VideoPlayer() {
   const ref = useRef<HTMLVideoElement>(null);
   const [title, setTitle] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+  const retry = () => {
+    setFailed(false);
+    const video = ref.current;
+    if (!video) return;
+    video.load();
+    void video.play().catch(() => undefined);
+  };
   useEffect(() => {
     playerElement = ref.current;
     showPlayer = setTitle;
@@ -138,10 +146,17 @@ export function VideoPlayer() {
   const close = () => {
     ref.current?.pause();
     setTitle(null);
+    setFailed(false);
   };
   return (
     <div className={`player ${title ? "" : "hidden"}`} role="dialog" aria-label={title ?? "Видео"} aria-hidden={!title}>
-      <video ref={ref} controls playsInline preload="none" />
+      <video ref={ref} controls playsInline preload="none" onError={() => setFailed(true)} onPlaying={() => setFailed(false)} />
+      {failed ? (
+        <div className="player-error" role="alert">
+          <div>Видео не загрузилось. Проверьте интернет — или скачайте его для офлайна заранее.</div>
+          <button className="btn btn-primary" onClick={retry}>Повторить</button>
+        </div>
+      ) : null}
       <button className="btn-icon close" onClick={close} aria-label="Закрыть видео"><Icon name="close" /></button>
     </div>
   );
@@ -153,7 +168,6 @@ export function VideoList({ videos }: { videos: MediaItem[] }) {
   const [cached, setCached] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const pathOf = (item: MediaItem) => new URL(mediaUrl(item.url), document.baseURI).pathname;
 
   useEffect(() => {
     void cachedVideoUrls().then(setCached);
@@ -165,7 +179,7 @@ export function VideoList({ videos }: { videos: MediaItem[] }) {
       setError("Это видео ещё обрабатывается на сервере — загляните через несколько минут.");
       return;
     }
-    if (!online && !cached.has(pathOf(item))) {
+    if (!online && !cached.has(cachedPath(item))) {
       setError("Это видео не скачано для офлайна, а интернета нет. Остальное работает; видео откроется, когда появится связь.");
       return;
     }
@@ -190,7 +204,7 @@ export function VideoList({ videos }: { videos: MediaItem[] }) {
       <div className="section-title"><h2>Видео</h2>{videos.length ? <span className="muted small">{videos.length}</span> : null}</div>
       {videos.length === 0 ? <div className="muted small">Видео к этому упражнению пока нет.</div> : null}
       {videos.map((v) => {
-        const isCached = cached.has(pathOf(v));
+        const isCached = cached.has(cachedPath(v));
         return (
           <div className="card row-with-action" key={v.driveFileId + v.version}>
             <button className="video-row tappable" style={{ background: "none", border: "none" }} onClick={() => play(v)}

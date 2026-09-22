@@ -14,7 +14,7 @@ import unittest
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
 
-from trenazher_content import (DriveFile, MediaMatcher, Snapshot, build_manifest, parse_exercise_sheet,  # noqa: E402
+from trenazher_content import (DriveFile, ExerciseRow, MediaMatcher, Snapshot, build_manifest, parse_exercise_sheet,  # noqa: E402
                                parse_media_cell, plural, report_markdown)
 
 FIXTURES = os.path.join(HERE, "fixtures")
@@ -29,6 +29,11 @@ def listing():
     with open(os.path.join(FIXTURES, "drive-files-2026-09-18.json"), encoding="utf-8") as f:
         data = json.load(f)
     return {k: [DriveFile.from_json(i) for i in v] for k, v in data.items()}
+
+
+def row(body_part, muscle_group, name, number=1):
+    return ExerciseRow(row_number=number, body_part=body_part, muscle_group=muscle_group, name=name, equipment=None,
+                       details="", sets=None, photo_cell="", other_video_cell="", own_video_cell="")
 
 
 def real_snapshot(workout_rows=None):
@@ -75,9 +80,28 @@ class MediaTests(unittest.TestCase):
         matcher = MediaMatcher([DriveFile("1", "Бицепс. Молот 2.JPG"), DriveFile("2", "Бицепс. Молот.JPG"),
                                 DriveFile("3", "Бицепс. Диагональный молот.JPG"), DriveFile("4", "Попа. Болгарские выпады. 1.mov"),
                                 DriveFile("5", "Попа. Румынка вар 2.mov")])
-        self.assertEqual([f.id for f in matcher.auto_matches("Молот")], ["2", "1"])
-        self.assertEqual([f.id for f in matcher.auto_matches("Болгарские выпады")], ["4"])
-        self.assertEqual([f.id for f in matcher.auto_matches("Румынка")], ["5"])
+        hammer = row("Руки", "Бицепс", "Молот")
+        self.assertEqual([f.id for f in matcher.auto_matches(hammer)], ["2", "1"])
+        self.assertEqual([f.id for f in matcher.auto_matches(row("Попа", "Ягодицы", "Болгарские выпады"))], ["4"])
+        self.assertEqual([f.id for f in matcher.auto_matches(row("Попа", "Ягодицы", "Румынка"))], ["5"])
+
+    def test_auto_match_is_two_sided(self):
+        """Приставка чужого раздела отводит файл; одноимённые упражнения требуют приставку своего."""
+        hammer = row("Руки", "Бицепс", "Молот")
+        triceps = row("Руки", "Трицепс", "Разгибание")
+        shoulder_hammer = row("Плечи", "Средняя дельта", "Молот")
+        matcher = MediaMatcher([DriveFile("1", "Трицепс. Молот.JPG"), DriveFile("2", "Молот.JPG"), DriveFile("3", "Бицепс. Молот.JPG")])
+        # «Трицепс. Молот» называет чужую группу мышц — бицепсовому «Молоту» не достаётся.
+        self.assertEqual([f.id for f in matcher.auto_matches(hammer, [hammer, triceps])], ["3", "2"])
+        # Два «Молота» в разных разделах: файл без приставки не привязывается ни к одному,
+        # «Бицепс. Молот» — только к своему.
+        self.assertEqual([f.id for f in matcher.auto_matches(hammer, [hammer, shoulder_hammer])], ["3"])
+        self.assertEqual([f.id for f in matcher.auto_matches(shoulder_hammer, [hammer, shoulder_hammer])], [])
+        # Приставка «Пресс» у упражнения раздела «Живот» с группой «Косые» — свободная, не чужая.
+        obliques = row("Живот", "Косые", "Наклоны в бок")
+        abs_low = row("Живот", "Пресс. Низ", "Мертвый жук")
+        matcher = MediaMatcher([DriveFile("9", "Пресс. Косые. Наклоны в бок.JPG")])
+        self.assertEqual([f.id for f in matcher.auto_matches(obliques, [obliques, abs_low])], ["9"])
 
     def test_explicit_name(self):
         matcher = MediaMatcher([DriveFile("1", "Бицепс. Молот 2.JPG"), DriveFile("2", "Трицепс. Молот 2.JPG"),

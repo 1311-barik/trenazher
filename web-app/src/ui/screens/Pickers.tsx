@@ -128,7 +128,6 @@ export function ExercisePicker({ mode }: { mode: "draft" | "addMore" }) {
   const manifest = useStore((s) => s.content.manifest);
   const draft = useStore((s) => s.draft);
   const session = useStore((s) => s.session);
-  const [extra, setExtra] = useState<string[]>([]);
   const [detail, setDetail] = useState<Exercise | null>(null);
   const { byPart } = store.contentIndex(manifest);
   if (!manifest) return <Missing back="/" />;
@@ -139,18 +138,17 @@ export function ExercisePicker({ mode }: { mode: "draft" | "addMore" }) {
   const parts = mode === "draft"
     ? draft.bodyParts
     : [...manifest.bodyParts.filter((p) => sessionParts.includes(p)), ...manifest.bodyParts.filter((p) => !sessionParts.includes(p))];
-  const selection = mode === "draft" ? draft.exerciseIds : extra;
+  // И для своей тренировки, и для добора выбор хранится в черновике: закрыл приложение — отметки на месте.
+  const selection = draft.exerciseIds;
   const doneToday = new Set(mode === "addMore" && session ? S.completedExerciseIds(session) : []);
-  const toggle = (id: string) => {
-    if (mode === "draft") store.toggleDraftExercise(id);
-    else setExtra((list) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]));
-  };
+  const toggle = (id: string) => store.toggleDraftExercise(id);
   const count = selection.length;
   const inRange = count >= S.recommendedRange.min && count <= S.recommendedRange.max;
 
   const continueWithExtra = () => {
-    const ordered = parts.flatMap((p) => (byPart.get(p) ?? []).map((e) => e.id)).filter((id) => extra.includes(id));
+    const ordered = parts.flatMap((p) => (byPart.get(p) ?? []).map((e) => e.id)).filter((id) => selection.includes(id));
     store.updateSession((s) => S.append(s, ordered, store.bodyPartsFor(ordered)));
+    store.resetDraft();
   };
 
   return (

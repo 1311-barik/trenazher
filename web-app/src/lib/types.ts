@@ -4,6 +4,8 @@
 export type MediaKind = "photo" | "ownVideo" | "otherVideo";
 
 export interface MediaItem {
+  /** Расширение исходного файла; Python пишет его для совместимости с нативной версией. */
+  fileExtension?: string;
   driveFileId: string;
   title: string;
   kind: MediaKind;
@@ -85,6 +87,8 @@ export interface Settings {
   reminderMinute: number;
   /** 1 — понедельник … 7 — воскресенье. */
   reminderWeekdays: number[];
+  /** Пользователь просил скачать все видео — докачиваем при следующих запусках (ТЗ 5.3). */
+  offlineVideos: boolean;
 }
 
 export const defaultSettings: Settings = {
@@ -93,4 +97,5 @@ export const defaultSettings: Settings = {
   reminderHour: 19,
   reminderMinute: 0,
   reminderWeekdays: [1, 3, 5],
+  offlineVideos: false,
 };

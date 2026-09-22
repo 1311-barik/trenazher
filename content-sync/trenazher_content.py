@@ -458,11 +458,38 @@ class MediaMatcher:
         self.files = sorted([f for f in files if not f.is_folder], key=lambda f: natural_key(f.base_name))
         self.by_id = {f.id: f for f in self.files}
 
-    def auto_matches(self, exercise_name: str) -> List[DriveFile]:
-        target = text_key(exercise_name)
+    def auto_matches(self, row: "ExerciseRow", rows: Sequence["ExerciseRow"] = ()) -> List[DriveFile]:
+        """Файлы, названные точно как упражнение (с приставкой раздела или без, номер не в счёт).
+        Однозначность с обеих сторон: приставка, называющая чужой раздел или группу мышц,
+        отводит файл («Трицепс. Молот» — не для бицепсового «Молота»); если упражнение с таким
+        названием есть и в другом разделе, файл привязывается только с приставкой своего раздела."""
+        target = text_key(row.name)
         if not target:
             return []
-        return [f for f in self.files if target in title_keys(f.base_name, strip_numbering=True)]
+        others = [r for r in rows if r is not row]
+        own_words = set((text_key(row.body_part) + " " + text_key(row.muscle_group or "")).split())
+        foreign = {text_key(r.body_part) for r in others} | {text_key(r.muscle_group or "") for r in others}
+        foreign = {k for k in foreign if k and not set(k.split()) & own_words}
+        namesakes = any(text_key(r.name) == target for r in others)
+        found = []
+        for f in self.files:
+            base = NUMBERING_SUFFIX.sub("", f.base_name)
+            segments = [segment.strip() for segment in base.split(".") if segment.strip()]
+            prefix: Optional[List[str]] = None
+            for start in range(len(segments)):
+                if text_key(" ".join(segments[start:])) == target:
+                    prefix = segments[:start]
+                    break
+            if prefix is None:
+                continue
+            prefix_keys = [text_key(segment) for segment in prefix]
+            prefix_words = set(" ".join(prefix_keys).split())
+            if any(key in foreign for key in prefix_keys):
+                continue
+            if namesakes and not prefix_words & own_words:
+                continue
+            found.append(f)
+        return found
 
     def resolve(self, reference: Tuple[str, str]):
         """('found', file) | ('not_found', None) | ('ambiguous', [files])."""
@@ -571,9 +598,14 @@ def _resolve_cell(cell: str, kind: str, row: ExerciseRow, matcher: MediaMatcher,
     if directive[0] == "none":
         return []
     if directive[0] == "auto":
-        found = matcher.auto_matches(row.name)
+        found = matcher.auto_matches(row, rows)
         if not found and directive[1]:
             picked = matcher.confident_match(row, rows)
+            if picked is None and any(r is not row and text_key(r.name) == text_key(row.name) for r in rows):
+                issues.append(issue("warning", f"{place}: упражнение «{row.name}» есть и в другом разделе, поэтому файл "
+                                               f"без приставки раздела не привязывается. Назовите файл "
+                                               f"«{row.body_part}. {row.name}» или впишите имя файла в ячейку."))
+                return []
             if picked is not None:
                 issues.append(issue("info", f"{place}: по ячейке «есть» подобран файл «{picked.base_name}» — "
                                             "совпали группа мышц и слова названия. Если это не тот файл, "
