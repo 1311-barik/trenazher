@@ -271,6 +271,13 @@ def parse_workout_blocks(rows: Sequence[Sequence[str]]) -> List[WorkoutRow]:
         name = display_name(exact or own or first)
         if name:
             workouts[-1].exercises.append(WorkoutEntry(index + 1, name, non_empty(section or "")))
+    for workout in workouts:
+        # Краткое описание на карточке (ТЗ 4.2): разделы тренировки в том порядке, как их записал автор.
+        sections: List[str] = []
+        for entry in workout.exercises:
+            if entry.section and entry.section not in sections:
+                sections.append(entry.section)
+        workout.summary = " · ".join(sections) or None
     return workouts
 
 

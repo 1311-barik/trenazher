@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { icsText, scheduleText } from "../../lib/calendar";
+import { downloadVideos } from "../../lib/offline";
 import { cacheVideo, cachedVideoUrls, loadManifest, mediaUrl, removeCachedVideos, storageEstimate } from "../../lib/platform";
 import * as store from "../../lib/store";
 import { useStore } from "../../lib/store";
@@ -155,14 +156,15 @@ function OfflineVideos() {
 
   const downloadAll = async () => {
     setError(null);
-    let failed = 0;
     setProgress({ done: 0, total: missing.length });
-    for (const [i, v] of missing.entries()) {
-      try { await cacheVideo(v); } catch { failed += 1; }
-      setProgress({ done: i + 1, total: missing.length });
-    }
+    const result = await downloadVideos(missing, cacheVideo, (done, total) => setProgress({ done, total }));
     setProgress(null);
-    if (failed) setError(`Не скачалось видео: ${failed}. Уже скачанные сохранены — нажмите ещё раз, чтобы докачать остальные.`);
+    if (result.outOfSpace) {
+      // ТЗ 6.5: сказать про место и предложить освободить — кнопка удаления скачанных видео прямо под сообщением.
+      setError(`На телефоне не хватает места: скачано ${result.done} из ${missing.length}. Освободите место (например, удалите скачанные видео ниже или лишние фото в телефоне) и нажмите ещё раз.`);
+    } else if (result.failed) {
+      setError(`Не скачалось видео: ${result.failed}. Уже скачанные сохранены — нажмите ещё раз, чтобы докачать остальные.`);
+    }
     await refresh();
   };
 

@@ -167,6 +167,9 @@ class WorkoutTests(unittest.TestCase):
                          ["спина/вокруг света", "смесь мышц/пуловер с гантелью лежа на полу", "живот/мертвый жук"])
         # «Бицепс. Молот» — группа мышц перед названием, а не раздел.
         self.assertEqual(manifest["workouts"][1]["exerciseIds"], ["руки/молот"])
+        # Описание карточки — разделы автора по порядку, без повторов.
+        self.assertEqual(manifest["workouts"][0]["summary"], "Спина · Пресс")
+        self.assertEqual(manifest["workouts"][1]["summary"], "Руки")
         # Ненайденное упражнение объясняет, куда вписать точное название, и предлагает похожие.
         missing = next(i["message"] for i in manifest["issues"]
                        if "Планка с перекладыванием гантели между руками" in i["message"])

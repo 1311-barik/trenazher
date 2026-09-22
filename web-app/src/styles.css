@@ -117,6 +117,8 @@ a { color: var(--blue); }
 .tappable { cursor: pointer; text-align: left; width: 100%; }
 .tappable:active { opacity: 0.85; }
 
+/* Длинные названия («…с подъёмом/опусканием…») при крупном системном шрифте переносятся, а не вылезают. */
+.title-xl, .title-l, .title-m, .main-action .text, .part-tile .caption, .stat { overflow-wrap: anywhere; }
 .title-xl { font-size: 2rem; font-weight: 900; margin: 12px 0 2px; letter-spacing: 0.02em; }
 .title-l { font-size: 1.45rem; font-weight: 800; margin: 0; }
 .title-m { font-size: 1.15rem; font-weight: 700; margin: 0; }
@@ -146,7 +148,7 @@ a { color: var(--blue); }
 
 .ex-row { display: flex; align-items: center; gap: 12px; padding: 10px; min-height: 76px; }
 .ex-row .thumb { width: 56px; height: 56px; border-radius: 10px; flex: none; }
-.ex-row .name { font-weight: 650; }
+.ex-row .name { font-weight: 650; overflow-wrap: anywhere; }
 .ex-row .grow { flex: 1; min-width: 0; }
 .row-with-action { display: flex; align-items: center; gap: 4px; }
 .row-with-action > :first-child { flex: 1; min-width: 0; }
@@ -234,3 +236,13 @@ input[type="time"] { font: inherit; font-weight: 700; color: var(--text); backgr
 .spinner { width: 22px; height: 22px; border-radius: 50%; border: 3px solid rgba(255, 255, 255, 0.25); border-top-color: #fff; animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+/* Телефон боком: нижняя панель ужимается, чтобы фото и текст оставались на экране. */
+@media (orientation: landscape) and (max-height: 520px) {
+  .bottom-bar { padding: 8px var(--pad) calc(8px + var(--safe-bottom)); gap: 6px; }
+  .bottom-bar .btn { min-height: 44px; }
+  .session-header { padding-bottom: 4px; }
+  .progress { margin-top: 4px; }
+  .rest-digits { font-size: 1.8rem; }
+  .title-l { font-size: 1.2rem; }
+}
