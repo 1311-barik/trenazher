@@ -5,6 +5,7 @@
 Совместимо с Python 3.9 (Mac) и 3.12 (сервер), только стандартная библиотека.
 """
 
+import json
 import os
 import re
 from dataclasses import dataclass, field
@@ -266,9 +267,13 @@ def parse_workout_blocks(rows: Sequence[Sequence[str]]) -> List[WorkoutRow]:
         first = cells[0] if cells else ""
         own = cells[1] if len(cells) > 1 else ""
         exact = cells[2] if len(cells) > 2 else ""
-        if first and (own or exact):
+        if first and not (own or exact):
+            # Только раздел («Попа») — заголовок для следующих строк, не упражнение.
             section = first
-        name = display_name(exact or own or first)
+            continue
+        if first:
+            section = first
+        name = display_name(exact or own)
         if name:
             workouts[-1].exercises.append(WorkoutEntry(index + 1, name, non_empty(section or "")))
     for workout in workouts:
@@ -450,13 +455,48 @@ def stems(text: str) -> Set[str]:
     return result
 
 
+@dataclass
+class Aliases:
+    """Таблица соответствий, которую ведёт разработчик (`aliases.json`): как автор контента называет
+    файлы и упражнения в тренировках → точное упражнение главного списка в виде «Раздел / Упражнение».
+    Явная и проверенная человеком, поэтому главнее эвристик (стандарт §8.3), но слабее имени,
+    которое автор сам вписал в ячейку. Ключи — `text_key` исходного названия."""
+    files: Dict[str, str] = field(default_factory=dict)
+    exercises: Dict[str, str] = field(default_factory=dict)
+
+
+def load_aliases(path: str) -> Aliases:
+    """Нет файла — пустая таблица: синхронизация работает и без неё."""
+    if not os.path.exists(path):
+        return Aliases()
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+    return Aliases(files={text_key(k): v for k, v in data.get("files", {}).items()},
+                   exercises={text_key(k): v for k, v in data.get("exercises", {}).items()})
+
+
+def split_reference(reference: str) -> Tuple[str, str]:
+    """«Раздел / Упражнение» → ключи раздела и названия."""
+    part, _, name = reference.partition("/")
+    return text_key(part), text_key(name)
+
+
 class MediaMatcher:
     """Однозначное сопоставление файлов папки с упражнением: явная ссылка в ячейке главнее,
-    автоматически — только точное совпадение имени без приставки раздела и номера."""
+    затем таблица соответствий, затем точное совпадение имени без приставки раздела и номера."""
 
     def __init__(self, files: Sequence[DriveFile]):
         self.files = sorted([f for f in files if not f.is_folder], key=lambda f: natural_key(f.base_name))
         self.by_id = {f.id: f for f in self.files}
+        # id файла → номер строки упражнения, за которым его закрепила таблица соответствий.
+        self.assigned: Dict[str, int] = {}
+
+    def free_for(self, f: DriveFile, row: "ExerciseRow") -> bool:
+        owner = self.assigned.get(f.id)
+        return owner is None or owner == row.row_number
+
+    def assigned_to(self, row: "ExerciseRow") -> List[DriveFile]:
+        return [f for f in self.files if self.assigned.get(f.id) == row.row_number]
 
     def auto_matches(self, row: "ExerciseRow", rows: Sequence["ExerciseRow"] = ()) -> List[DriveFile]:
         """Файлы, названные точно как упражнение (с приставкой раздела или без, номер не в счёт).
@@ -473,6 +513,8 @@ class MediaMatcher:
         namesakes = any(text_key(r.name) == target for r in others)
         found = []
         for f in self.files:
+            if not self.free_for(f, row):
+                continue
             base = NUMBERING_SUFFIX.sub("", f.base_name)
             segments = [segment.strip() for segment in base.split(".") if segment.strip()]
             prefix: Optional[List[str]] = None
@@ -528,20 +570,31 @@ class MediaMatcher:
         """Для ячейки «есть»: файл привязывается, только если он единственный подходящий
         и сам подходит единственному упражнению. Однозначность с обеих сторон — иначе
         «Бицепс. Молот» уехал бы и в «Молот», и в «Диагональный молот» (стандарт §8.7)."""
-        found = [f for f in self.files if self.fits_section(f, row)]
+        found = [f for f in self.files if self.free_for(f, row) and self.fits_section(f, row)]
         if len(found) != 1:
             return None
         if sum(1 for other in rows if self.fits_section(found[0], other)) > 1:
             return None
         return found[0]
 
-    def suggestions(self, exercise_name: str, limit: int = 2) -> List[DriveFile]:
-        """Похожие файлы — только подсказка человеку, автоматически не привязываются."""
+    def taken_elsewhere(self, f: DriveFile, row: "ExerciseRow", rows: Sequence["ExerciseRow"]) -> bool:
+        """Файл уже чей-то: закреплён таблицей за другим упражнением или назван точно как другое."""
+        if not self.free_for(f, row):
+            return True
+        keys = title_keys(f.base_name, strip_numbering=True)
+        return any(r is not row and text_key(r.name) in keys for r in rows)
+
+    def suggestions(self, exercise_name: str, limit: int = 2, row: Optional["ExerciseRow"] = None,
+                    rows: Sequence["ExerciseRow"] = ()) -> List[DriveFile]:
+        """Похожие файлы — только подсказка человеку, автоматически не привязываются.
+        Чужие файлы не предлагаются: подсказать фото разведения к жиму — хуже, чем промолчать."""
         target = stems(exercise_name)
         if not target:
             return []
         scored = []
         for f in self.files:
+            if row is not None and self.taken_elsewhere(f, row, rows):
+                continue
             segments = [s.strip() for s in f.base_name.split(".") if s.strip()]
             best = 0.0
             for start in range(len(segments)):
@@ -599,6 +652,7 @@ def _resolve_cell(cell: str, kind: str, row: ExerciseRow, matcher: MediaMatcher,
         return []
     if directive[0] == "auto":
         found = matcher.auto_matches(row, rows)
+        found += [f for f in matcher.assigned_to(row) if f not in found]
         if not found and directive[1]:
             picked = matcher.confident_match(row, rows)
             if picked is None and any(r is not row and text_key(r.name) == text_key(row.name) for r in rows):
@@ -611,7 +665,7 @@ def _resolve_cell(cell: str, kind: str, row: ExerciseRow, matcher: MediaMatcher,
                                             "совпали группа мышц и слова названия. Если это не тот файл, "
                                             "впишите в ячейку нужное имя."))
                 return [picked]
-            hint = " или ".join(f"«{f.base_name}»" for f in matcher.suggestions(row.name))
+            hint = " или ".join(f"«{f.base_name}»" for f in matcher.suggestions(row.name, row=row, rows=rows))
             suggestion = f" Возможно, подходит: {hint}." if hint else ""
             issues.append(issue("warning", f"{place}: написано «есть», но файл с таким названием не найден.{suggestion} "
                                            "Впишите в ячейку имя файла или ссылку на него."))
@@ -630,9 +684,10 @@ def _resolve_cell(cell: str, kind: str, row: ExerciseRow, matcher: MediaMatcher,
     return files
 
 
-def build_manifest(snapshot: Snapshot, now: Optional[datetime] = None) -> Dict:
+def build_manifest(snapshot: Snapshot, now: Optional[datetime] = None, aliases: Optional[Aliases] = None) -> Dict:
     """Манифест в том же формате, что у нативной версии (ContentManifest)."""
     now = now or datetime.now(timezone.utc)
+    aliases = aliases or Aliases()
     issues = list(snapshot.issues)
     rows, parse_issues = parse_exercise_sheet(snapshot.exercise_rows)
     issues += parse_issues
@@ -642,6 +697,21 @@ def build_manifest(snapshot: Snapshot, now: Optional[datetime] = None) -> Dict:
         "ownVideo": MediaMatcher(snapshot.own_videos),
         "otherVideo": MediaMatcher(snapshot.other_videos),
     }
+    rows_by_ref = {(text_key(r.body_part), text_key(r.name)): r for r in rows}
+    broken: Set[str] = set()
+    for matcher in matchers.values():
+        for f in matcher.files:
+            reference = aliases.files.get(text_key(f.base_name))
+            if reference is None:
+                continue
+            target = rows_by_ref.get(split_reference(reference))
+            if target is None:
+                if reference not in broken:
+                    broken.add(reference)
+                    issues.append(issue("warning", f"В таблице соответствий файлу «{f.base_name}» назначено «{reference}», "
+                                                   "но такого упражнения в таблице нет — файл сопоставляется как обычно."))
+                continue
+            matcher.assigned[f.id] = target.row_number
     used_ids: Set[str] = set()
     exercises: List[Dict] = []
     body_parts: List[str] = []
@@ -674,7 +744,12 @@ def build_manifest(snapshot: Snapshot, now: Optional[datetime] = None) -> Dict:
             "photos": photos, "videos": videos, "version": version,
         })
 
-    workouts = _build_workouts(snapshot.workout_rows, exercises, issues)
+    aliased_files = sum(len(m.assigned) for m in matchers.values())
+    workouts = _build_workouts(snapshot.workout_rows, exercises, issues, aliases)
+    if aliased_files or aliases.exercises:
+        issues.append(issue("info", f"По таблице соответствий разработчика (`content-sync/aliases.json`) привязано файлов: "
+                                    f"{aliased_files}. Так сопоставлены файлы и названия в тренировках, названные по-своему. "
+                                    "Имя файла, вписанное в ячейку, главнее таблицы."))
 
     for kind, matcher in matchers.items():
         for f in matcher.files:
@@ -694,7 +769,9 @@ def build_manifest(snapshot: Snapshot, now: Optional[datetime] = None) -> Dict:
     }
 
 
-def _build_workouts(rows: List[List[str]], exercises: List[Dict], issues: List[Dict[str, str]]) -> List[Dict]:
+def _build_workouts(rows: List[List[str]], exercises: List[Dict], issues: List[Dict[str, str]],
+                    aliases: Optional[Aliases] = None) -> List[Dict]:
+    aliases = aliases or Aliases()
     if not rows:
         return []
     parsed, parse_issues = parse_workout_sheet(rows)
@@ -723,6 +800,21 @@ def _build_workouts(rows: List[List[str]], exercises: List[Dict], issues: List[D
                 return exercise
         return None
 
+    def lookup_with_aliases(name: str, section: Optional[str]) -> Optional[Dict]:
+        found = lookup(name, section)
+        if found is not None:
+            return found
+        reference = aliases.exercises.get(text_key(name))
+        if reference is None:
+            return None
+        part, exercise_name = split_reference(reference)
+        for exercise in exercises:
+            if text_key(exercise["bodyPart"]) == part and text_key(exercise["name"]) == exercise_name:
+                return exercise
+        issues.append(issue("warning", f"В таблице соответствий «{name}» назначено «{reference}», но такого упражнения "
+                                       "в таблице нет."))
+        return None
+
     def suggestions(name: str) -> List[str]:
         """Похожие названия из главного списка — подсказка Жене, не автопривязка (§8.7 стандарта)."""
         wanted = stems(name)
@@ -742,7 +834,7 @@ def _build_workouts(rows: List[List[str]], exercises: List[Dict], issues: List[D
         ids = []
         missing = 0
         for row_number, name, section in row.exercises:
-            exercise = lookup(name, section)
+            exercise = lookup_with_aliases(name, section)
             if exercise:
                 if exercise["id"] not in ids:
                     ids.append(exercise["id"])

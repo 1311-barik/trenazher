@@ -14,7 +14,8 @@ import unittest
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
 
-from trenazher_content import (DriveFile, ExerciseRow, MediaMatcher, Snapshot, build_manifest, parse_exercise_sheet,  # noqa: E402
+from trenazher_content import (Aliases, DriveFile, ExerciseRow, MediaMatcher, Snapshot, build_manifest, load_aliases,  # noqa: E402
+                               parse_exercise_sheet,
                                parse_media_cell, plural, report_markdown)
 
 FIXTURES = os.path.join(HERE, "fixtures")
@@ -157,6 +158,90 @@ class ConfidentMatchTests(unittest.TestCase):
     def test_ambiguous_cell_still_asks_to_fill_in(self):
         self.assertTrue(any("написано «есть», но файл с таким названием не найден" in i["message"]
                             for i in self.manifest["issues"]))
+
+
+def snapshot_0926():
+    with open(os.path.join(FIXTURES, "snapshot-2026-09-26.json"), encoding="utf-8") as f:
+        data = json.load(f)
+    files = lambda key: [DriveFile.from_json(item) for item in data[key]]
+    return Snapshot(exercise_rows=data["exercise_rows"], workout_rows=data["workout_rows"], photos=files("photos"),
+                    own_videos=files("ownVideos"), other_videos=files("otherVideos"))
+
+
+ALIASES = os.path.join(os.path.dirname(HERE), "aliases.json")
+
+
+class FinalContentTests(unittest.TestCase):
+    """Приёмка контента 2026-09-26: Женя сказала «всё, других файлов не будет».
+    Проверяем её же словами: 37 упражнений, у всех чужое видео, три тренировки по 12."""
+
+    def setUp(self):
+        self.manifest = build_manifest(snapshot_0926(), aliases=load_aliases(ALIASES))
+        self.by_name = {e["name"]: e for e in self.manifest["exercises"]}
+
+    def test_every_exercise_has_other_video(self):
+        self.assertEqual(len(self.manifest["exercises"]), 37)
+        without = [e["name"] for e in self.manifest["exercises"] if not any(v["kind"] == "otherVideo" for v in e["videos"])]
+        self.assertEqual(without, [])
+
+    def test_photos_everywhere_but_one_really_missing(self):
+        # В папке «Фото упражнений» нет ни одного файла про обычный жим лёжа — это честная дыра, не ошибка сопоставления.
+        without = [e["name"] for e in self.manifest["exercises"] if not e["photos"]]
+        self.assertEqual(without, ["Жим гантелей лёжа — обычный"])
+
+    def test_three_workouts_by_twelve(self):
+        self.assertEqual([(w["title"], len(w["exerciseIds"])) for w in self.manifest["workouts"]],
+                         [("Как за каменной спиной+", 12), ("Пресс-аташе", 12), ("Ноги и крылья", 12)])
+
+    def test_every_file_in_folders_is_used(self):
+        used = {(m["kind"], m["driveFileId"]) for e in self.manifest["exercises"] for m in e["photos"] + e["videos"]}
+        snap = snapshot_0926()
+        free = [f.name for kind, files in (("photo", snap.photos), ("ownVideo", snap.own_videos), ("otherVideo", snap.other_videos))
+                for f in files if (kind, f.id) not in used]
+        self.assertEqual(free, [])
+
+    def test_aliased_file_goes_only_to_its_exercise(self):
+        """«Попа. Приседания» по названию подходит и «Сумо», и «Простым» — таблица отдаёт его только «Простым»."""
+        simple = [m["title"] for m in self.by_name["Простые приседания"]["photos"]]
+        sumo = [m["title"] for m in self.by_name["Приседание сумо"]["photos"]]
+        self.assertEqual(simple, ["Попа. Приседания"])
+        self.assertEqual(sumo, ["Попа. Сумо"])
+
+    def test_no_video_marker_respected(self):
+        """«нет и не будет» в колонке Жени — никаких её видео и никаких замечаний по этой ячейке."""
+        bulgarian = self.by_name["Болгарские выпады"]
+        self.assertFalse(any(v["kind"] == "ownVideo" for v in bulgarian["videos"]))
+        self.assertFalse(any("Болгарские выпады" in i["message"] and "Женя видео" in i["message"] for i in self.manifest["issues"]))
+
+    def test_alias_to_unknown_exercise_is_reported(self):
+        aliases = Aliases(files={"попа сумо": "Попа / Такого нет"}, exercises={"мертый жук": "Живот / Тоже нет"})
+        manifest = build_manifest(snapshot_0926(), aliases=aliases)
+        messages = [i["message"] for i in manifest["issues"]]
+        self.assertTrue(any("«Попа / Такого нет»" in m for m in messages))
+        self.assertTrue(any("«Живот / Тоже нет»" in m for m in messages))
+
+    def test_lone_section_row_is_a_header(self):
+        """Строка «Попа» без упражнения — заголовок раздела, а не упражнение «Попа»."""
+        messages = [i["message"] for i in self.manifest["issues"]]
+        self.assertFalse(any("«Попа» не найдено" in m for m in messages))
+        self.assertFalse(any("показана не полностью" in m for m in messages))
+
+    def test_only_genuine_gaps_remain(self):
+        """После таблицы соответствий в отчёте остаются только настоящие дыры контента."""
+        warnings = [i["message"] for i in self.manifest["issues"] if i["severity"] in ("warning", "error")]
+        self.assertEqual(len(warnings), 2, warnings)
+        self.assertTrue(any("«Жим гантелей лёжа — обычный», колонка «Фото»" in w for w in warnings))
+        self.assertTrue(any("«Тяга 90 градусов с опорой», колонка «Женя видео»" in w for w in warnings))
+
+    def test_hint_never_offers_a_file_of_another_exercise(self):
+        press = next(i["message"] for i in self.manifest["issues"] if "«Жим гантелей лёжа — обычный», колонка «Фото»" in i["message"])
+        self.assertNotIn("Разведение", press)
+
+    def test_real_aliases_all_resolve(self):
+        broken = [i["message"] for i in self.manifest["issues"] if "таблице соответствий" in i["message"] and "назначено" in i["message"]]
+        self.assertEqual(broken, [])
+        summary = next(i for i in self.manifest["issues"] if "По таблице соответствий" in i["message"])
+        self.assertEqual(summary["severity"], "info")
 
 
 class WorkoutTests(unittest.TestCase):

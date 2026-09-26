@@ -35,8 +35,11 @@ import urllib.parse
 import urllib.request
 from typing import Dict, List, Optional
 
-from trenazher_content import (DriveFile, Snapshot, VIDEO_EXTENSIONS, all_media, build_manifest, issue,
+from trenazher_content import (DriveFile, Snapshot, VIDEO_EXTENSIONS, all_media, build_manifest, issue, load_aliases,
                                report_markdown, stable_hash, text_key)
+
+# Таблица соответствий лежит рядом со скриптом и выкладывается вместе с ним.
+ALIASES_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "aliases.json")
 
 PHOTO_MAX = 1400
 THUMB_MAX = 400
@@ -349,7 +352,7 @@ def main() -> int:
         log(f"не удалось прочитать Google: {error}")
         return 1
 
-    manifest = build_manifest(snapshot)
+    manifest = build_manifest(snapshot, aliases=load_aliases(ALIASES_PATH))
     log(f"манифест: {len(manifest['exercises'])} упражнений, {len(manifest['workouts'])} тренировок, "
         f"{len(manifest['issues'])} замечаний")
     failures = 0
