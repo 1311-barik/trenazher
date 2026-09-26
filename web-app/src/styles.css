@@ -118,7 +118,10 @@ a { color: var(--blue); }
 .tappable:active { opacity: 0.85; }
 
 /* Длинные названия («…с подъёмом/опусканием…») при крупном системном шрифте переносятся, а не вылезают. */
-.title-xl, .title-l, .title-m, .main-action .text, .part-tile .caption, .stat { overflow-wrap: anywhere; }
+/* Длинное слово переносится по слогам (lang="ru") и рвётся, только если целиком не помещается в строку. */
+.title-xl, .title-l, .title-m, .main-action .text, .part-tile .caption, .stat, .ex-row .name {
+  overflow-wrap: break-word; -webkit-hyphens: auto; hyphens: auto;
+}
 .title-xl { font-size: 2rem; font-weight: 900; margin: 12px 0 2px; letter-spacing: 0.02em; }
 .title-l { font-size: 1.45rem; font-weight: 800; margin: 0; }
 .title-m { font-size: 1.15rem; font-weight: 700; margin: 0; }
@@ -148,7 +151,9 @@ a { color: var(--blue); }
 
 .ex-row { display: flex; align-items: center; gap: 12px; padding: 10px; min-height: 76px; }
 .ex-row .thumb { width: 56px; height: 56px; border-radius: 10px; flex: none; }
-.ex-row .name { font-weight: 650; overflow-wrap: anywhere; }
+/* Обложка готовой тренировки: фиксированный квадрат, чтобы название не зажималось в узкую колонку. */
+.cover-thumb { width: 88px; height: 88px; border-radius: 12px; flex: none; }
+.ex-row .name { font-weight: 650; }
 .ex-row .grow { flex: 1; min-width: 0; }
 .row-with-action { display: flex; align-items: center; gap: 4px; }
 .row-with-action > :first-child { flex: 1; min-width: 0; }

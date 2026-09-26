@@ -41,8 +41,8 @@ function WorkoutCard({ workout }: { workout: Workout }) {
     <div className="card pad" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       <button className="tappable" style={{ display: "flex", gap: 12, background: "none", border: "none", padding: 0, color: "inherit" }}
         onClick={() => go(link("workout", workout.id))}>
-        <MediaImage item={cover} className="thumb" />
-        <span style={{ flex: 1 }}>
+        <MediaImage item={cover} className="cover-thumb" />
+        <span style={{ flex: 1, minWidth: 0 }}>
           <span className="title-m" style={{ display: "block" }}>{workout.title}</span>
           {workout.summary ? <span className="muted small" style={{ display: "block" }}>{workout.summary}</span> : null}
           <span className="faint tiny" style={{ fontWeight: 700 }}>{exercisesText(exercises.length)} · {S.estimateText(exercises.length)}</span>
