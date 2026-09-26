@@ -114,7 +114,7 @@ function FirstLoad() {
     return <EmptyState icon="wifiOff" title="Нужен интернет" message="Для первой загрузки упражнений нужен интернет. Потом всё загруженное работает без него."
       actionTitle="Повторить" onAction={() => void loadManifest()} />;
   }
-  return <EmptyState icon="alert" title="Упражнения ещё не загружены" message={content.error ?? "Попробуйте ещё раз через минуту."}
+  return <EmptyState icon="alert" title="Упражнения ещё не загружены" message={content.error ?? "Попробуй ещё раз через минуту."}
     actionTitle="Повторить" onAction={() => void loadManifest()} />;
 }
 
@@ -140,7 +140,7 @@ function InstallHint() {
     <div className="card banner">
       <span className="muted"><Icon name="share" /></span>
       <div className="grow small">
-        <b>Установите на экран «Домой»</b><br />
+        <b>Поставь на экран «Домой»</b><br />
         <span className="muted">В Safari: кнопка «Поделиться» → «На экран „Домой“». Так приложение откроется на весь экран и будет работать без интернета.</span>
       </div>
       <button className="btn-icon plain" onClick={hide} aria-label="Скрыть подсказку"><Icon name="close" size={18} /></button>

@@ -14,7 +14,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { error: E
       <div className="center-screen" style={{ minHeight: "100vh" }}>
         <h1 className="title-l">Что-то пошло не так</h1>
         <p className="muted">
-          Экран не смог открыться. История, избранное и идущая тренировка сохранены на устройстве — ничего не потерялось.
+          Экран не открылся. История, избранное и текущая тренировка на месте — ничего не потерялось.
         </p>
         <button className="btn btn-primary" onClick={() => { window.location.hash = "#/"; window.location.reload(); }}>
           Перезапустить приложение

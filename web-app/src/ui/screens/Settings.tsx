@@ -41,7 +41,7 @@ export function Settings() {
                     onClick={() => store.updateSettings({ restDurationSeconds: s })}>{s} секунд</button>
                 ))}
               </div>
-              <div className="small muted">Запускается после «Подход выполнен» и кнопкой «Отдых». Можно продлить на 15 секунд или пропустить. При заблокированном экране сигнал не прозвучит — держите приложение открытым.</div>
+              <div className="small muted">Отдых включается после «Подход выполнен» или кнопкой «Отдых». Его можно продлить на 15 секунд или пропустить. Если экран заблокирован, сигнала не будет — держи приложение открытым.</div>
             </>
           ) : null}
         </Section>
@@ -53,7 +53,7 @@ export function Settings() {
           <OfflineVideos />
           <button className="tappable" style={{ background: "none", border: "none", padding: 0, color: "inherit", display: "flex", alignItems: "center", minHeight: 44 }}
             onClick={() => go("/settings/issues")}>
-            <span style={{ flex: 1 }}>Проверка контента</span>
+            <span style={{ flex: 1 }}>Проверка таблицы — для Жени</span>
             <span className={`small ${issuesCount ? "warn" : "ok"}`}>{issuesCount ? `замечаний: ${issuesCount}` : "всё в порядке"}</span>
             <span className="faint"><Icon name="forward" /></span>
           </button>
@@ -78,7 +78,7 @@ function Reminders() {
     try {
       if (navigator.canShare?.({ files: [file] })) {
         await navigator.share({ files: [file], title: "Напоминание о тренировке" });
-        setStatus("В появившемся окне выберите «Календарь» — событие повторится каждую неделю.");
+        setStatus("В окне выбери «Календарь» — событие будет повторяться каждую неделю.");
         return;
       }
     } catch (error) {
@@ -92,7 +92,7 @@ function Reminders() {
     link.click();
     link.remove();
     setTimeout(() => URL.revokeObjectURL(url), 2000);
-    setStatus("Файл напоминания сохранён. Откройте его — iPhone предложит добавить событие в Календарь.");
+    setStatus("Файл напоминания сохранён. Открой его — iPhone предложит добавить событие в Календарь.");
   };
   const toggleDay = (day: number) => {
     const days = settings.reminderWeekdays.includes(day)
@@ -103,7 +103,7 @@ function Reminders() {
   const time = `${String(settings.reminderHour).padStart(2, "0")}:${String(settings.reminderMinute).padStart(2, "0")}`;
   return (
     <Section title="Напоминания" icon="bell">
-      <div className="small muted">Напоминание ставится повторяющимся событием в Календарь iPhone — сработает, даже если приложение закрыто.</div>
+      <div className="small muted">Напоминание попадёт в Календарь iPhone как повторяющееся событие и сработает, даже если приложение закрыто.</div>
       <label className="switch-row">
         <span>Время</span>
         <input type="time" value={time} onChange={(e) => {
@@ -121,12 +121,14 @@ function Reminders() {
         <button className="btn btn-secondary" onClick={() => void addToCalendar()}>
           <Icon name="calendar" /> Добавить в Календарь
         </button>
-      ) : <div className="small warn">Выберите хотя бы один день.</div>}
+      ) : <div className="small warn">Выбери хотя бы один день.</div>}
       {status ? <div className="small" role="status">{status}</div> : null}
-      <div className="tiny faint">
-        Поменяли время или дни — добавьте событие заново, а старое удалите в Календаре.
-        Если окно не появилось, поставьте напоминание вручную — {scheduleText(settings)}.
-      </div>
+      {settings.reminderWeekdays.length ? (
+        <div className="tiny faint">
+          Поменял время или дни — добавь событие заново, а старое удали в Календаре.
+          Если окно не появилось, поставь напоминание вручную: {scheduleText(settings)}.
+        </div>
+      ) : null}
     </Section>
   );
 }
@@ -161,9 +163,9 @@ function OfflineVideos() {
     setProgress(null);
     if (result.outOfSpace) {
       // ТЗ 6.5: сказать про место и предложить освободить — кнопка удаления скачанных видео прямо под сообщением.
-      setError(`На телефоне не хватает места: скачано ${result.done} из ${missing.length}. Освободите место (например, удалите скачанные видео ниже или лишние фото в телефоне) и нажмите ещё раз.`);
+      setError(`На телефоне кончилось место: скачано ${result.done} из ${missing.length}. Освободи место — например, удали лишние фото — и нажми ещё раз.`);
     } else if (result.failed) {
-      setError(`Не скачалось видео: ${result.failed}. Уже скачанные сохранены — нажмите ещё раз, чтобы докачать остальные.`);
+      setError(`Не скачалось видео: ${result.failed}. Скачанные сохранены — нажми ещё раз, чтобы докачать остальные.`);
     }
     await refresh();
   };
@@ -189,7 +191,7 @@ function OfflineVideos() {
         </div>
       ) : missing.length ? (
         <button className="btn btn-secondary" disabled={!online} onClick={downloadAll}>
-          Скачать все видео для офлайна{missingBytes ? ` (≈ ${megabytes(missingBytes)})` : ""}
+          Скачать все видео{missingBytes ? ` (≈ ${megabytes(missingBytes)})` : ""}
         </button>
       ) : null}
       {videos.length - missing.length > 0 && !progress ? <button className="btn-text" onClick={removeAll}>Удалить скачанные видео</button> : null}
@@ -217,7 +219,7 @@ function Backup() {
   const importFile = async (file: File) => {
     try {
       const result = store.importBackup(JSON.parse(await file.text()));
-      setMessage(`Восстановлено: тренировок ${result.history}, избранного ${result.favorites}${result.settings ? ", настройки" : ""}. Ничего не удалено${result.settings ? "" : ", настройки этого устройства оставлены"}.`);
+      setMessage(`Восстановлено — тренировок: ${result.history}, избранного: ${result.favorites}. ${result.settings ? "Настройки взяты из копии." : "Настройки остались как были."} Ничего не удалено.`);
     } catch (e) {
       setMessage(`Не получилось: ${(e as Error).message}`);
     }
@@ -226,7 +228,7 @@ function Backup() {
   return (
     <Section title="Где хранятся данные" icon="device">
       <div className="small muted">
-        История, избранное и настройки хранятся на этом устройстве (тренировок в истории: {historyCount}). На другое устройство они сами не переносятся — для этого есть резервная копия.
+        История (тренировок: {historyCount}), избранное и настройки хранятся только на этом телефоне. На другое устройство сами не переедут — для этого есть резервная копия.
       </div>
       <button className="btn btn-secondary" onClick={exportFile}><Icon name="download" /> Сохранить резервную копию</button>
       <button className="btn-text blue" onClick={() => input.current?.click()}>Восстановить из файла</button>
@@ -242,7 +244,7 @@ export function Issues() {
   const groups: Array<[ContentIssue["severity"], string]> = [["error", "Ошибки"], ["warning", "Нужно поправить в таблице"], ["info", "Для сведения"]];
   return (
     <div className="screen">
-      <Header title="Проверка контента" back="/settings" />
+      <Header title="Проверка таблицы" back="/settings" />
       <div className="content">
         <div className="small muted">
           Упражнения собираются из таблицы «Дрон тренировка» и папок на Google Drive. Здесь — что не удалось сопоставить.

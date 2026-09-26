@@ -31,17 +31,12 @@ export async function loadManifest(): Promise<void> {
     }
     void prefetchImages(manifest);
     void resumeOfflineVideos(manifest);
-  } catch (error) {
+  } catch {
     const offline = typeof navigator !== "undefined" && !navigator.onLine;
-    // Сообщение — человеку: без «Failed to fetch» и кодов (стандарт §10.2).
-    contentFailed(offline ? "Нет интернета — работает всё, что уже загружено." : `Сервер не отвечает (${humanError(error)}) — показываю последнюю загруженную версию.`);
+    // Сообщение — человеку: без «Failed to fetch» и кодов (стандарт §10.2). Что показано вместо свежего —
+    // дописывает строка статуса, здесь только причина.
+    contentFailed(offline ? "Нет интернета — работает всё, что уже загружено." : "Не получилось обновить упражнения.");
   }
-}
-
-function humanError(error: unknown): string {
-  const message = (error as Error)?.message ?? "";
-  if (/failed to fetch|load failed|networkerror/i.test(message)) return "нет связи";
-  return message || "ошибка сети";
 }
 
 /** Путь, под которым видео лежит в кэше, — общий для экрана настроек и карточки. */
@@ -93,11 +88,11 @@ async function prefetchImages(manifest: Manifest): Promise<void> {
 
 
 export async function cacheVideo(item: MediaItem): Promise<void> {
-  if (typeof caches === "undefined") throw new Error("Браузер не умеет хранить файлы");
+  if (typeof caches === "undefined") throw new Error("этот браузер не умеет сохранять видео");
   await requestPersistentStorage();
   const cache = await caches.open(VIDEO_CACHE);
   const response = await fetch(mediaUrl(item.url));
-  if (!response.ok) throw new Error(`сервер ответил ${response.status}`);
+  if (!response.ok) throw new Error("сервер не отдал видео");
   await cache.put(mediaUrl(item.url), response);
 }
 

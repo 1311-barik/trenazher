@@ -148,7 +148,7 @@ class ConfidentMatchTests(unittest.TestCase):
         self.assertEqual([m["title"] for m in classic["photos"]], ["Бицепс. Классика"])
         picked = next(i["message"] for i in self.manifest["issues"]
                       if "подобран файл «Бицепс. Классика»" in i["message"])
-        self.assertIn("впишите в ячейку нужное имя", picked)
+        self.assertIn("впиши в ячейку нужное имя", picked)
 
     def test_file_fitting_two_exercises_is_not_bound(self):
         """«Бицепс. Молот» подходит и «Молоту», и «Диагональному молоту» — значит никому."""
@@ -234,13 +234,22 @@ class FinalContentTests(unittest.TestCase):
         self.assertTrue(any("«Тяга 90 градусов с опорой», колонка «Женя видео»" in w for w in warnings))
 
     def test_hint_never_offers_a_file_of_another_exercise(self):
+        """Ни файл, названный как другое упражнение, ни файл, уже привязанный к другому упражнению
+        (узкий хват подобран по ячейке «есть»), не предлагаются к обычному жиму."""
         press = next(i["message"] for i in self.manifest["issues"] if "«Жим гантелей лёжа — обычный», колонка «Фото»" in i["message"])
         self.assertNotIn("Разведение", press)
+        self.assertNotIn("узким хватом", press)
+
+    def test_summary_has_no_developer_paths(self):
+        """Сводка видна в приложении — без путей к файлам и служебных кавычек."""
+        summary = next(i["message"] for i in self.manifest["issues"] if "таблице соответствий" in i["message"] and "назначено" not in i["message"])
+        self.assertNotIn("`", summary)
+        self.assertNotIn(".json", summary)
 
     def test_real_aliases_all_resolve(self):
         broken = [i["message"] for i in self.manifest["issues"] if "таблице соответствий" in i["message"] and "назначено" in i["message"]]
         self.assertEqual(broken, [])
-        summary = next(i for i in self.manifest["issues"] if "По таблице соответствий" in i["message"])
+        summary = next(i for i in self.manifest["issues"] if "таблице соответствий" in i["message"] and "назначено" not in i["message"])
         self.assertEqual(summary["severity"], "info")
 
 

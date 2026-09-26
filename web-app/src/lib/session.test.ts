@@ -148,6 +148,51 @@ describe("хранилище", () => {
     expect(store.getState().history).toEqual([]);
   });
 
+  it("снятая часть тела не попадает ни в счётчик, ни в тренировку, но её отметки возвращаются вместе с ней", () => {
+    store.toggleDraftPart("Руки");
+    store.toggleDraftPart("Попа");
+    store.toggleDraftExercise("руки/молот");
+    store.toggleDraftExercise("попа/сумо");
+    store.toggleDraftPart("Руки"); // передумал про руки
+    expect(store.orderedDraft()).toEqual(["попа/сумо"]); // то, что обещает кнопка «Начать (N)»
+    store.toggleDraftPart("Руки"); // вернул — отметка на месте
+    expect(store.orderedDraft()).toEqual(["руки/молот", "попа/сумо"]);
+    store.toggleDraftPart("Руки");
+    store.startCustom();
+    expect(store.getState().session?.queue).toEqual(["попа/сумо"]);
+  });
+
+  it("в итоге и истории — части тела сделанных упражнений, а не всей очереди", () => {
+    store.toggleDraftPart("Руки");
+    store.toggleDraftPart("Попа");
+    store.toggleDraftExercise("руки/молот");
+    store.toggleDraftExercise("попа/сумо");
+    store.startCustom();
+    store.updateSession((s) => S.markSetDone(s, null)); // подход только в «Молоте»
+    const entry = store.finishSession();
+    expect(entry?.exerciseIds).toEqual(["руки/молот"]);
+    expect(entry?.bodyParts).toEqual(["Руки"]);
+  });
+
+  it("данные неверной формы в хранилище не роняют приложение", () => {
+    store.resetForTests({ draft: "null", history: "{}", favorites: '"строка"', session: "[1]", settings: "[1,2]" });
+    const st = store.getState();
+    expect(st.draft).toEqual({ bodyParts: [], exerciseIds: [] });
+    expect(st.history).toEqual([]);
+    expect(st.favorites).toEqual([]);
+    expect(st.session).toBeNull();
+    expect(st.settings.restDurationSeconds).toBe(60);
+  });
+
+  it("отметки при доборе переживают перезапуск: обновление контента их не стирает", () => {
+    store.toggleDraftExercise("руки/молот"); // при доборе части тела не выбираются — только упражнения
+    store.applyManifest(manifest); // так приложение делает при каждом запуске
+    expect(store.getState().draft.exerciseIds).toEqual(["руки/молот"]);
+    store.toggleDraftExercise("руки/удалено-из-таблицы");
+    store.applyManifest(manifest);
+    expect(store.getState().draft.exerciseIds).toEqual(["руки/молот"]); // а исчезнувшее из таблицы — убирается
+  });
+
   it("завершение без единого подхода не пишет историю и говорит об этом", () => {
     store.toggleDraftPart("Руки");
     store.toggleDraftExercise("руки/молот");

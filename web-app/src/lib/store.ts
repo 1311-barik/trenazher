@@ -50,14 +50,23 @@ export interface AppState {
 const PREFIX = "trenazher.v1.";
 const memory = new Map<string, string>();
 
-function read<T>(key: string, fallback: T): T {
+/** Читает сохранённое. Испорченное или чужой формы (старая версия, ручная правка) — значение по умолчанию:
+ *  один битый ключ не должен запирать экран в «Что-то пошло не так» после каждого перезапуска. */
+function read<T>(key: string, fallback: T, valid: (value: unknown) => boolean = () => true): T {
   try {
     const raw = typeof localStorage !== "undefined" ? localStorage.getItem(PREFIX + key) : memory.get(PREFIX + key) ?? null;
-    return raw ? (JSON.parse(raw) as T) : fallback;
+    if (!raw) return fallback;
+    const value: unknown = JSON.parse(raw);
+    return valid(value) ? (value as T) : fallback;
   } catch {
     return fallback;
   }
 }
+
+const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
+const isDraft = (v: unknown) => isObject(v) && Array.isArray(v.bodyParts) && Array.isArray(v.exerciseIds);
+const isSession = (v: unknown) => v === null || (isObject(v) && Array.isArray(v.queue) && Array.isArray(v.setsDone));
+const isManifest = (v: unknown) => v === null || (isObject(v) && Array.isArray(v.exercises) && Array.isArray(v.bodyParts));
 
 function write(key: string, value: unknown): string | undefined {
   const raw = JSON.stringify(value);
@@ -70,20 +79,20 @@ function write(key: string, value: unknown): string | undefined {
     }
     return undefined;
   } catch {
-    return "Не удалось сохранить данные на устройстве — возможно, закончилось место. Последнее действие может не сохраниться.";
+    return "Телефон не дал сохранить данные — скорее всего, кончилось место. Последнее действие может пропасть.";
   }
 }
 
 const PERSISTED = ["favorites", "history", "settings", "draft", "session"] as const;
 
 function initialState(): AppState {
-  const cachedManifest = read<Manifest | null>("manifest", null);
+  const cachedManifest = read<Manifest | null>("manifest", null, isManifest);
   return {
-    favorites: read("favorites", []),
-    history: read("history", []),
-    settings: { ...defaultSettings, ...read<Partial<Settings>>("settings", {}) },
-    draft: read("draft", { bodyParts: [], exerciseIds: [] }),
-    session: read("session", null),
+    favorites: read("favorites", [], Array.isArray),
+    history: read("history", [], Array.isArray),
+    settings: { ...defaultSettings, ...read<Partial<Settings>>("settings", {}, isObject) },
+    draft: read("draft", { bodyParts: [], exerciseIds: [] }, isDraft),
+    session: read("session", null, isSession),
     finished: null,
     rest: null,
     toast: null,
@@ -121,8 +130,10 @@ export function useStore<T>(selector: (s: AppState) => T): T {
 }
 
 /** Только для тестов. */
-export function resetForTests(): void {
+/** Для тестов: чистое хранилище или заранее положенные «сырые» значения (как их увидит приложение при запуске). */
+export function resetForTests(raw: Record<string, string> = {}): void {
   memory.clear();
+  for (const [key, value] of Object.entries(raw)) memory.set(PREFIX + key, value);
   state = initialState();
 }
 
@@ -181,7 +192,7 @@ export function showToast(message: string, actionTitle?: string, action?: () => 
   if (toastTimer) clearTimeout(toastTimer);
   toastTimer = setTimeout(() => {
     if (state.toast?.id === toast.id) setState({ toast: null });
-  }, action ? 4500 : 2500);
+  }, action ? 8000 : 2500); // с «Отменить» — дольше: руки могут быть заняты гантелями
 }
 
 export function toastAction(): void {
@@ -257,13 +268,13 @@ export function orderedDraft(): string[] {
   return state.draft.bodyParts.flatMap((p) => (byPart.get(p) ?? []).map((e) => e.id)).filter((id) => selected.has(id));
 }
 
-/** После обновления контента убираем из черновика то, чего больше нет. */
+/** После обновления контента убираем из черновика то, чего больше нет в таблице.
+ *  Только это: при доборе части тела не выбираются, и отметки не должны зависеть от них. */
 export function pruneDraft(): void {
   const manifest = state.content.manifest;
   if (!manifest) return;
-  const { byPart } = contentIndex(manifest);
   const parts = state.draft.bodyParts.filter((p) => manifest.bodyParts.includes(p));
-  const valid = new Set(parts.flatMap((p) => (byPart.get(p) ?? []).map((e) => e.id)));
+  const valid = new Set(manifest.exercises.map((e) => e.id));
   const ids = state.draft.exerciseIds.filter((id) => valid.has(id));
   if (parts.length !== state.draft.bodyParts.length || ids.length !== state.draft.exerciseIds.length) {
     setState({ draft: { bodyParts: parts, exerciseIds: ids } });
@@ -320,7 +331,9 @@ export function finishSession(): HistoryEntry | null {
   const session = state.session;
   if (!session) return null;
   const { byId } = contentIndex(state.content.manifest);
-  const entry = S.historyEntry(session, (id) => byId.get(id)?.name);
+  const done = S.historyEntry(session, (id) => byId.get(id)?.name);
+  // Части тела — по тому, что реально сделано, а не по всей очереди с добором.
+  const entry = done ? { ...done, bodyParts: bodyPartsFor(done.exerciseIds) } : null;
   if (entry) addHistory(entry);
   else showToast("Тренировка закрыта без записи: ни одного подхода не отмечено");
   setState({ session: null, finished: entry, rest: null });

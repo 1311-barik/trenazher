@@ -13,7 +13,9 @@ import { ExerciseDetail, Missing } from "./Pickers";
 export function Favorites() {
   const favorites = useStore((s) => s.favorites);
   const manifest = useStore((s) => s.content.manifest);
-  const [tab, setTab] = useState<FavoriteItem["type"]>("exercise");
+  // Открываемся на вкладке, где что-то есть: добавил тренировку — видишь её, а не «Нет избранных упражнений».
+  const [tab, setTab] = useState<FavoriteItem["type"]>(() =>
+    favorites.some((f) => f.type === "exercise") || !favorites.some((f) => f.type === "workout") ? "exercise" : "workout");
   const { byId, workoutsById } = store.contentIndex(manifest);
   const items = favorites.filter((f) => f.type === tab);
 
@@ -27,7 +29,7 @@ export function Favorites() {
         </div>
         {items.length === 0 ? (
           <EmptyState icon="heart" title={tab === "exercise" ? "Нет избранных упражнений" : "Нет избранных тренировок"}
-            message="Нажмите ♡ на карточке упражнения или тренировки — она появится здесь." />
+            message={tab === "exercise" ? "Нажми ♡ на карточке упражнения — оно появится здесь." : "Нажми ♡ на карточке тренировки — она появится здесь."} />
         ) : null}
         {items.map((item) => {
           const exercise = item.type === "exercise" ? byId.get(item.itemId) : undefined;
@@ -87,7 +89,7 @@ export function History() {
       <Header title="История" back="/" />
       <div className="content">
         {history.length === 0 ? (
-          <EmptyState icon="history" title="Здесь появятся тренировки" message="Каждая завершённая тренировка сохраняется здесь автоматически." />
+          <EmptyState icon="history" title="Здесь появятся тренировки" message="Каждая завершённая тренировка попадает сюда сама." />
         ) : (
           // Спокойная сводка: факты, без «серий» и штрафов за перерывы.
           <div className="stats">

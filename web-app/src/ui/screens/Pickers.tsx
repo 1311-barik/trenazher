@@ -93,7 +93,7 @@ export function BodyParts() {
     <div className="screen">
       <Header title="Части тела" back="/" />
       <div className="content with-bar">
-        <div className="muted small">Рекомендуем выбрать 2–3 части тела — иначе упражнений будет слишком много. Можно выбрать и больше.</div>
+        <div className="muted small">Рекомендуем выбрать 2–3 части тела — иначе упражнений будет слишком много. Можно и больше.</div>
         <div className="parts-grid">
           {manifest.bodyParts.map((part) => {
             const exercises = byPart.get(part) ?? [];
@@ -114,7 +114,7 @@ export function BodyParts() {
       </div>
       <BottomBar>
         <button className="btn btn-primary" disabled={!draft.bodyParts.length} onClick={() => go("/custom/exercises")}>
-          {draft.bodyParts.length ? `Далее: упражнения (${draft.bodyParts.length})` : "Выберите часть тела"}
+          {draft.bodyParts.length ? `Далее: упражнения (${draft.bodyParts.length})` : "Выбери часть тела"}
         </button>
         {draft.bodyParts.length || draft.exerciseIds.length ? <button className="btn-text" onClick={store.resetDraft}>Сбросить выбор</button> : null}
       </BottomBar>
@@ -139,7 +139,9 @@ export function ExercisePicker({ mode }: { mode: "draft" | "addMore" }) {
     ? draft.bodyParts
     : [...manifest.bodyParts.filter((p) => sessionParts.includes(p)), ...manifest.bodyParts.filter((p) => !sessionParts.includes(p))];
   // И для своей тренировки, и для добора выбор хранится в черновике: закрыл приложение — отметки на месте.
-  const selection = draft.exerciseIds;
+  // В своей тренировке считаем только отметки выбранных частей тела: снял «Руки» — их упражнения не
+  // обещаются кнопкой «Начать (N)», но и не стираются, вернёшь «Руки» — отметки на месте.
+  const selection = mode === "draft" ? store.orderedDraft() : draft.exerciseIds;
   const doneToday = new Set(mode === "addMore" && session ? S.completedExerciseIds(session) : []);
   const toggle = (id: string) => store.toggleDraftExercise(id);
   const count = selection.length;
@@ -191,7 +193,7 @@ export function ExercisePicker({ mode }: { mode: "draft" | "addMore" }) {
         {mode === "draft" ? (
           <>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
-              <span style={{ fontWeight: 700 }}>{count ? `Выбрано: ${count} · ${S.estimateText(count)}` : "Отметьте упражнения"}</span>
+              <span style={{ fontWeight: 700 }}>{count ? `Выбрано: ${count} · ${S.estimateText(count)}` : "Отметь упражнения"}</span>
               {/* Рекомендация — нейтральным цветом: это подсказка, а не ошибка. */}
               <span className={`small ${inRange ? "ok" : "faint"}`}>рекомендуем 10–12</span>
             </div>
@@ -201,7 +203,7 @@ export function ExercisePicker({ mode }: { mode: "draft" | "addMore" }) {
           </>
         ) : (
           <>
-            <button className="btn btn-primary" disabled={!count} onClick={continueWithExtra}>{count ? `Продолжить (${count})` : "Выберите упражнения"}</button>
+            <button className="btn btn-primary" disabled={!count} onClick={continueWithExtra}>{count ? `Продолжить (${count})` : "Отметь упражнения"}</button>
             <button className="btn-text" onClick={() => store.finishSession()}>Нет, закончить тренировку</button>
           </>
         )}
@@ -236,7 +238,7 @@ export function Missing({ back }: { back: string }) {
     <div className="screen">
       <Header title="Не найдено" back={back} />
       <div className="content">
-        <EmptyState icon="alert" title="Этого больше нет в таблице" message="Возможно, упражнение или тренировку переименовали или убрали. Вернитесь назад." />
+        <EmptyState icon="alert" title="Такого здесь нет" message="Возможно, это переименовали или удалили. Вернись назад — кнопка вверху слева." />
       </div>
     </div>
   );

@@ -490,6 +490,8 @@ class MediaMatcher:
         self.by_id = {f.id: f for f in self.files}
         # id файла → номер строки упражнения, за которым его закрепила таблица соответствий.
         self.assigned: Dict[str, int] = {}
+        # id файла → строки упражнений, которым он достанется при сборке (заполняется предварительным проходом).
+        self.claimed: Dict[str, Set[int]] = {}
 
     def free_for(self, f: DriveFile, row: "ExerciseRow") -> bool:
         owner = self.assigned.get(f.id)
@@ -578,8 +580,11 @@ class MediaMatcher:
         return found[0]
 
     def taken_elsewhere(self, f: DriveFile, row: "ExerciseRow", rows: Sequence["ExerciseRow"]) -> bool:
-        """Файл уже чей-то: закреплён таблицей за другим упражнением или назван точно как другое."""
+        """Файл уже чей-то: закреплён таблицей, достанется другому упражнению или назван точно как другое."""
         if not self.free_for(f, row):
+            return True
+        owners = self.claimed.get(f.id)
+        if owners and row.row_number not in owners:
             return True
         keys = title_keys(f.base_name, strip_numbering=True)
         return any(r is not row and text_key(r.name) in keys for r in rows)
@@ -657,18 +662,18 @@ def _resolve_cell(cell: str, kind: str, row: ExerciseRow, matcher: MediaMatcher,
             picked = matcher.confident_match(row, rows)
             if picked is None and any(r is not row and text_key(r.name) == text_key(row.name) for r in rows):
                 issues.append(issue("warning", f"{place}: упражнение «{row.name}» есть и в другом разделе, поэтому файл "
-                                               f"без приставки раздела не привязывается. Назовите файл "
-                                               f"«{row.body_part}. {row.name}» или впишите имя файла в ячейку."))
+                                               f"без приставки раздела не привязывается. Назови файл "
+                                               f"«{row.body_part}. {row.name}» или впиши имя файла в ячейку."))
                 return []
             if picked is not None:
                 issues.append(issue("info", f"{place}: по ячейке «есть» подобран файл «{picked.base_name}» — "
                                             "совпали группа мышц и слова названия. Если это не тот файл, "
-                                            "впишите в ячейку нужное имя."))
+                                            "впиши в ячейку нужное имя."))
                 return [picked]
             hint = " или ".join(f"«{f.base_name}»" for f in matcher.suggestions(row.name, row=row, rows=rows))
             suggestion = f" Возможно, подходит: {hint}." if hint else ""
             issues.append(issue("warning", f"{place}: написано «есть», но файл с таким названием не найден.{suggestion} "
-                                           "Впишите в ячейку имя файла или ссылку на него."))
+                                           "Впиши в ячейку имя файла или ссылку на него."))
         return found
     files: List[DriveFile] = []
     for reference in directive[1]:
@@ -680,7 +685,7 @@ def _resolve_cell(cell: str, kind: str, row: ExerciseRow, matcher: MediaMatcher,
             issues.append(issue("warning", f"{place}: файл «{_describe(reference)}» не найден в папке «{FOLDER_TITLES[kind]}»."))
         else:
             names = ", ".join(f"«{f.base_name}»" for f in value[:3])
-            issues.append(issue("warning", f"{place}: под «{_describe(reference)}» подходит несколько файлов ({names}) — уточните имя."))
+            issues.append(issue("warning", f"{place}: под «{_describe(reference)}» подходит несколько файлов ({names}) — уточни имя."))
     return files
 
 
@@ -712,6 +717,26 @@ def build_manifest(snapshot: Snapshot, now: Optional[datetime] = None, aliases: 
                                                    "но такого упражнения в таблице нет — файл сопоставляется как обычно."))
                 continue
             matcher.assigned[f.id] = target.row_number
+    # Предварительный проход: кому какой файл достанется. Нужен подсказкам в отчёте — предлагать
+    # файл, который уже привязан к другому упражнению, значит путать автора.
+    for kind, matcher in matchers.items():
+        for row in rows:
+            cell = {"photo": row.photo_cell, "ownVideo": row.own_video_cell, "otherVideo": row.other_video_cell}[kind]
+            directive = parse_media_cell(cell)
+            found: List[DriveFile] = []
+            if directive[0] == "explicit":
+                for reference in directive[1]:
+                    status, value = matcher.resolve(reference)
+                    if status == "found":
+                        found.append(value)
+            elif directive[0] == "auto":
+                found = matcher.auto_matches(row, rows) + matcher.assigned_to(row)
+                if not found and directive[1]:
+                    picked = matcher.confident_match(row, rows)
+                    found = [picked] if picked is not None else []
+            for f in found:
+                matcher.claimed.setdefault(f.id, set()).add(row.row_number)
+
     used_ids: Set[str] = set()
     exercises: List[Dict] = []
     body_parts: List[str] = []
@@ -747,9 +772,9 @@ def build_manifest(snapshot: Snapshot, now: Optional[datetime] = None, aliases: 
     aliased_files = sum(len(m.assigned) for m in matchers.values())
     workouts = _build_workouts(snapshot.workout_rows, exercises, issues, aliases)
     if aliased_files or aliases.exercises:
-        issues.append(issue("info", f"По таблице соответствий разработчика (`content-sync/aliases.json`) привязано файлов: "
-                                    f"{aliased_files}. Так сопоставлены файлы и названия в тренировках, названные по-своему. "
-                                    "Имя файла, вписанное в ячейку, главнее таблицы."))
+        issues.append(issue("info", f"Файлы и упражнения в тренировках, названные по-своему, сопоставлены вручную по "
+                                    f"таблице соответствий: файлов — {aliased_files}. Если вписать имя файла в ячейку, "
+                                    "оно главнее таблицы."))
 
     for kind, matcher in matchers.items():
         for f in matcher.files:
@@ -843,7 +868,7 @@ def _build_workouts(rows: List[List[str]], exercises: List[Dict], issues: List[D
             similar = suggestions(name)
             hint = (" Похоже на: " + "; ".join(f"«{s}»" for s in similar) + ".") if similar else ""
             issues.append(issue("warning", f"Тренировка «{row.title}», строка {row_number}: упражнение «{name}» не найдено "
-                                           f"в главном списке. Впишите точное название из главного списка в третью колонку "
+                                           f"в главном списке. Впиши точное название из главного списка в третью колонку "
                                            f"(«Ссылка на главный список»).{hint}"))
         if not ids:
             issues.append(issue("warning", f"Тренировка «{row.title}» пропущена: в ней нет ни одного найденного упражнения."))

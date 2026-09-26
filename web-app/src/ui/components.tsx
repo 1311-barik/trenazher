@@ -96,8 +96,8 @@ export function PhotoCarousel({ photos }: { photos: MediaItem[] }) {
   const track = useRef<HTMLDivElement>(null);
   if (photos.length === 0) {
     return (
-      <div className="carousel media" aria-label="Фото пока нет">
-        <div className="empty"><Icon name="photo" size={30} /><span className="small">Фото пока нет</span></div>
+      <div className="carousel media" aria-label="Фото нет">
+        <div className="empty"><Icon name="photo" size={30} /><span className="small">Фото нет</span></div>
       </div>
     );
   }
@@ -153,7 +153,7 @@ export function VideoPlayer() {
       <video ref={ref} controls playsInline preload="none" onError={() => setFailed(true)} onPlaying={() => setFailed(false)} />
       {failed ? (
         <div className="player-error" role="alert">
-          <div>Видео не загрузилось. Проверьте интернет — или скачайте его для офлайна заранее.</div>
+          <div>Видео не загрузилось. Проверь интернет или заранее скачай видео, чтобы смотреть без него.</div>
           <button className="btn btn-primary" onClick={retry}>Повторить</button>
         </div>
       ) : null}
@@ -176,11 +176,11 @@ export function VideoList({ videos }: { videos: MediaItem[] }) {
   const play = (item: MediaItem) => {
     setError(null);
     if (!item.ready) {
-      setError("Это видео ещё обрабатывается на сервере — загляните через несколько минут.");
+      setError("Видео ещё готовится на сервере — загляни через несколько минут.");
       return;
     }
     if (!online && !cached.has(cachedPath(item))) {
-      setError("Это видео не скачано для офлайна, а интернета нет. Остальное работает; видео откроется, когда появится связь.");
+      setError("Видео не скачано, а интернета нет — оно откроется, когда появится связь. Остальное работает.");
       return;
     }
     openVideo(item);
@@ -193,7 +193,7 @@ export function VideoList({ videos }: { videos: MediaItem[] }) {
       await cacheVideo(item);
       setCached(await cachedVideoUrls());
     } catch (e) {
-      setError(`Не удалось скачать видео: ${(e as Error).message}. Попробуйте ещё раз.`);
+      setError(`Видео не скачалось: ${(e as Error).message}. Попробуй ещё раз.`);
     } finally {
       setBusy(null);
     }
@@ -202,7 +202,7 @@ export function VideoList({ videos }: { videos: MediaItem[] }) {
   return (
     <section style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       <div className="section-title"><h2>Видео</h2>{videos.length ? <span className="muted small">{videos.length}</span> : null}</div>
-      {videos.length === 0 ? <div className="muted small">Видео к этому упражнению пока нет.</div> : null}
+      {videos.length === 0 ? <div className="muted small">Видео к этому упражнению нет.</div> : null}
       {videos.map((v) => {
         const isCached = cached.has(cachedPath(v));
         return (
@@ -219,7 +219,7 @@ export function VideoList({ videos }: { videos: MediaItem[] }) {
                 </div>
                 <div className="small" style={{ fontWeight: 650 }}>{v.title}</div>
                 <div className="tiny muted">
-                  {!v.ready ? "Обрабатывается на сервере…" : isCached ? "Скачано · работает без интернета" : v.byteSize ? `Смотреть · ${megabytes(v.byteSize)}` : "Смотреть"}
+                  {!v.ready ? "Готовится на сервере…" : isCached ? "Скачано · работает без интернета" : v.byteSize ? `Смотреть · ${megabytes(v.byteSize)}` : "Смотреть"}
                 </div>
               </div>
             </button>
@@ -295,9 +295,9 @@ export function SyncStatus({ withButton = false, onRefresh }: { withButton?: boo
       {!online ? (
         <span>Нет интернета — работает всё, что уже загружено.</span>
       ) : content.error && content.manifest ? (
-        <span className="warn">{content.error} Показываю последнюю загруженную версию.</span>
+        <span className="warn">{content.error} Показываю то, что загружено раньше.</span>
       ) : content.fetchedAt ? (
-        <span>Упражнения обновлены {formatRelative(content.fetchedAt)} · {exercisesText(count)}</span>
+        <span>Обновлено {formatRelative(content.fetchedAt)} · {exercisesText(count)}</span>
       ) : null}
       {withButton && onRefresh ? (
         <button className="btn btn-secondary" onClick={onRefresh} disabled={!online}>Обновить упражнения</button>

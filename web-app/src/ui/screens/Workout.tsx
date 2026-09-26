@@ -45,6 +45,15 @@ function ExerciseStep({ session }: { session: WorkoutSession }) {
   const pos = S.position(session);
 
   useEffect(() => {
+    if (!menu) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenu(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [menu]);
+
+  useEffect(() => {
     window.scrollTo(0, 0);
   }, [session.currentIndex]);
 
@@ -72,6 +81,7 @@ function ExerciseStep({ session }: { session: WorkoutSession }) {
         </div>
         <div className="progress" role="progressbar" aria-valuemin={0} aria-valuemax={pos.total} aria-valuenow={pos.index}
           aria-label="Прогресс тренировки"><div style={{ width: `${(pos.index / pos.total) * 100}%` }} /></div>
+        {menu ? <div className="menu-backdrop" onClick={() => setMenu(false)} aria-hidden="true" /> : null}
         {menu ? (
           <div className="card raised menu" role="menu">
             <button role="menuitem" onClick={() => { setMenu(false); store.finishSession(); }}>Завершить и сохранить</button>
@@ -82,7 +92,7 @@ function ExerciseStep({ session }: { session: WorkoutSession }) {
       <div className="content with-bar">
         {exercise
           ? <ExerciseCardContent key={session.currentIndex} exercise={exercise} />
-          : <EmptyState icon="alert" title="Упражнение убрано из таблицы" message="Его удалили при обновлении. Переходите к следующему — прогресс сохранён." />}
+          : <EmptyState icon="alert" title="Упражнение убрано из таблицы" message="Его убрали из таблицы. Переходи к следующему — прогресс сохранён." />}
       </div>
       <SetsPanel session={session} exercise={exercise} />
     </div>
