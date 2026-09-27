@@ -8,7 +8,7 @@
 
 ```
 Google-таблица + папки Drive (Женя)
-        │  раз в 10 минут, по API-ключу (ключ только на сервере)
+        │  по команде ./deploy/pull-content.sh, по API-ключу (ключ только на сервере)
         ▼
 content-sync/sync.py на сервере ──► /var/www/trenazher/content/
    разбор таблицы, сопоставление файлов,          manifest.json
@@ -64,7 +64,7 @@ cd ../content-sync && python3 -m unittest discover -s tests -v
 | Контент | `/var/www/trenazher/content` (пользователь `trenazher`) |
 | Синхронизатор | `/opt/trenazher/content-sync`, кэш оригиналов и отчёт — `/var/lib/trenazher` |
 | Ключ Google | `/etc/trenazher/sync.env` (права 640, root:trenazher). Проект Google Cloud `trenazher-509109`, ключ `trenazher-server`: только Sheets API + Drive API, только с IP сервера — **и IPv4 135.181.197.13, и IPv6 2a01:4f9:c015:a064::1** (в Google сервер ходит по IPv6). Сменится сервер — обновить ограничения ключа |
-| Таймер | `trenazher-sync.timer` → `trenazher-sync.service`, раз в 10 минут, `nice 19` |
+| Таймер | `trenazher-sync.timer` **выключен с 2026-09-27** — контент подтягивается по команде `./deploy/pull-content.sh` (запускает `trenazher-sync.service`, `nice 19`) |
 | nginx | `/etc/nginx/sites-available/trenazher`, сертификат Let's Encrypt продлевает `certbot.timer` |
 
 Ключ вводит владелец сам — скрытым вводом, ключ не попадает ни в историю команд, ни в чат:

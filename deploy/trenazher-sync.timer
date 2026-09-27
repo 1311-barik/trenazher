@@ -1,3 +1,5 @@
+# ВЫКЛЮЧЕН с 2026-09-27: контент подтягивается по команде владельца — ./deploy/pull-content.sh.
+# Вернуть автоматику: systemctl enable --now trenazher-sync.timer
 [Unit]
 Description=Тренажёр: синхронизация контента каждые 10 минут
 

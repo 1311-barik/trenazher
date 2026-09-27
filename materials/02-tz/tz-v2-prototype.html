@@ -1,0 +1,496 @@
+
+	      <!DOCTYPE html>
+<html>
+  <head>
+    <title>CodeSandbox</title>
+
+    <script type="importmap">
+      {"imports":{"react":"https://esm.sh/react@18.3.1","lucide-react":"https://esm.sh/lucide-react?external=react,react-dom","react-dom":"https://esm.sh/react-dom@18.3.1","react/jsx-runtime":"https://esm.sh/react@18.3.1/jsx-runtime","react-dom/client":"https://esm.sh/react-dom@18.3.1/client","tailwindcss/defaultTheme":"https://esm.sh/tailwindcss/defaultTheme","tailwindcss-animate":"https://esm.sh/tailwindcss-animate"}}
+    </script>
+
+    <script>
+      window.addEventListener("error", function (event) {
+        const errorObj = {
+          message: event.message,
+          source: event.filename,
+          lineno: event.lineno,
+          colno: event.colno,
+          stack: event.error ? event.error.stack : null
+        };
+        window.parent.postMessage(
+          { action: "error", error: JSON.stringify(errorObj) },
+          "*"
+        );
+        event.preventDefault();
+      });
+
+  function handleImportError(error) {
+    throw new Error('Import module failed: ' + error.target.src);
+  }
+
+  const observer = new MutationObserver(mutations => {
+    mutations.forEach(mutation => {
+      mutation.addedNodes.forEach(node => {
+        if (node.tagName === 'SCRIPT' && node.type === 'module') {
+          node.onerror = handleImportError;
+        }
+      });
+    });
+  });
+
+  observer.observe(document.documentElement, { childList: true, subtree: true });
+
+  document.querySelectorAll('script[type="module"]').forEach(script => {
+    script.onerror = handleImportError;
+  });
+
+  
+window.console = new Proxy(console, {
+  get(target, prop) {
+    if (['log', 'warn', 'error'].includes(prop)) {
+      return new Proxy(target[prop], {
+        apply(fn, thisArg, args) {
+          fn.apply(thisArg, args);
+          window.parent.postMessage({ action: 'console', 
+            type: prop, 
+            args: args.map((arg) => {
+              try {
+                return JSON.stringify(arg).replace(/^["']|["']$/g, '');
+              } catch (e) {
+                return arg;
+              }
+            }) 
+          }, '*');
+        }
+      });
+    }
+    return target[prop];
+  }
+});
+
+
+    </script>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,typography,aspect-ratio,container-queries"></script>
+    <style type="text/tailwindcss">
+      @layer base {
+        :root {
+          --background: 0 0% 100%;
+          --foreground: 222.2 47.4% 11.2%;
+
+          --muted: 210 40% 96.1%;
+          --muted-foreground: 215.4 16.3% 46.9%;
+
+          --popover: 0 0% 100%;
+          --popover-foreground: 222.2 47.4% 11.2%;
+
+          --border: 214.3 31.8% 91.4%;
+          --input: 214.3 31.8% 91.4%;
+
+          --card: 0 0% 100%;
+          --card-foreground: 222.2 47.4% 11.2%;
+
+          --primary: 222.2 47.4% 11.2%;
+          --primary-foreground: 210 40% 98%;
+
+          --secondary: 210 40% 96.1%;
+          --secondary-foreground: 222.2 47.4% 11.2%;
+
+          --accent: 210 40% 96.1%;
+          --accent-foreground: 222.2 47.4% 11.2%;
+
+          --destructive: 0 100% 50%;
+          --destructive-foreground: 210 40% 98%;
+
+          --ring: 215 20.2% 65.1%;
+
+          --radius: 0.5rem;
+        }
+
+        .dark {
+          --background: 224 71% 4%;
+          --foreground: 213 31% 91%;
+
+          --muted: 223 47% 11%;
+          --muted-foreground: 215.4 16.3% 56.9%;
+
+          --accent: 216 34% 17%;
+          --accent-foreground: 210 40% 98%;
+
+          --popover: 224 71% 4%;
+          --popover-foreground: 215 20.2% 65.1%;
+
+          --border: 216 34% 17%;
+          --input: 216 34% 17%;
+
+          --card: 224 71% 4%;
+          --card-foreground: 213 31% 91%;
+
+          --primary: 210 40% 98%;
+          --primary-foreground: 222.2 47.4% 1.2%;
+
+          --secondary: 222.2 47.4% 11.2%;
+          --secondary-foreground: 210 40% 98%;
+
+          --destructive: 0 63% 31%;
+          --destructive-foreground: 210 40% 98%;
+
+          --ring: 216 34% 17%;
+
+          --radius: 0.5rem;
+        }
+      }
+    </style>
+    <script type="module">
+          import defaultTheme from "tailwindcss/defaultTheme"
+          import tailwindcssAnimate from "tailwindcss-animate"
+
+          const fontFamily = defaultTheme.fontFamily;
+
+          tailwind.config = {
+            darkMode: ["class"],
+        content: ["app/**/*.{ts,tsx}", "components/**/*.{ts,tsx}"],
+        theme: {
+          container: {
+            center: true,
+            padding: "2rem",
+            screens: {
+              "2xl": "1400px",
+            },
+          },
+          extend: {
+            colors: {
+              border: "hsl(var(--border))",
+              input: "hsl(var(--input))",
+              ring: "hsl(var(--ring))",
+              background: "hsl(var(--background))",
+              foreground: "hsl(var(--foreground))",
+              primary: {
+                DEFAULT: "hsl(var(--primary))",
+                foreground: "hsl(var(--primary-foreground))",
+              },
+              secondary: {
+                DEFAULT: "hsl(var(--secondary))",
+                foreground: "hsl(var(--secondary-foreground))",
+              },
+              destructive: {
+                DEFAULT: "hsl(var(--destructive))",
+                foreground: "hsl(var(--destructive-foreground))",
+              },
+              muted: {
+                DEFAULT: "hsl(var(--muted))",
+                foreground: "hsl(var(--muted-foreground))",
+              },
+              accent: {
+                DEFAULT: "hsl(var(--accent))",
+                foreground: "hsl(var(--accent-foreground))",
+              },
+              popover: {
+                DEFAULT: "hsl(var(--popover))",
+                foreground: "hsl(var(--popover-foreground))",
+              },
+              card: {
+                DEFAULT: "hsl(var(--card))",
+                foreground: "hsl(var(--card-foreground))",
+              },
+            },
+            borderRadius: {
+              lg: `var(--radius)`,
+              md: `calc(var(--radius) - 2px)`,
+              sm: "calc(var(--radius) - 4px)",
+            },
+            fontFamily: {
+              sans: [...fontFamily.sans],
+            },
+
+            keyframes: {
+              "accordion-down": {
+                from: { height: "0" },
+                to: { height: "var(--radix-accordion-content-height)" },
+              },
+              "accordion-up": {
+                from: { height: "var(--radix-accordion-content-height)" },
+                to: { height: "0" },
+              },
+            },
+            animation: {
+              "accordion-down": "accordion-down 0.2s ease-out",
+              "accordion-up": "accordion-up 0.2s ease-out",
+            },
+          },
+        },
+        plugins: [tailwindcssAnimate]
+      }
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.27.0/babel.min.js"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="text/babel" data-type="module">
+      		  import {createRoot} from "react-dom/client";
+            
+      		  import React, { useState } from 'react';
+import { Play, Pause, SkipBack, SkipForward, Menu, Download, CheckCircle } from 'lucide-react';
+
+function TrainerApp() {
+  const [screen, setScreen] = useState('home'); // home, workout, sync
+  const [currentProgram, setCurrentProgram] = useState(null);
+  const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [syncProgress, setSyncProgress] = useState(0);
+
+  // Временные данные
+  const programs = [
+    {
+      id: 1,
+      name: 'Спина',
+      description: 'Базовые упражнения на спину',
+      exercises: [
+        { id: 1, name: 'Подтягивания', reps: '3x8', description: 'Выполни подтягивания с собственным весом' },
+        { id: 2, name: 'Тяга в наклоне', reps: '3x10', description: 'Тяга штанги в наклоне' },
+        { id: 3, name: 'Тяга верхнего блока', reps: '3x12', description: 'Работай на тренажере' },
+      ]
+    },
+    {
+      id: 2,
+      name: 'Ноги',
+      description: 'Тренировка ног и ягодиц',
+      exercises: [
+        { id: 1, name: 'Приседания', reps: '4x6', description: 'Приседания со штангой' },
+        { id: 2, name: 'Жим платформы', reps: '3x10', description: 'На тренажере платформа' },
+      ]
+    },
+    {
+      id: 3,
+      name: 'Грудь',
+      description: 'Упражнения на грудные мышцы',
+      exercises: [
+        { id: 1, name: 'Жим лежа', reps: '4x8', description: 'Жим штанги лежа' },
+      ]
+    },
+  ];
+
+  const handleStartWorkout = (program) => {
+    setCurrentProgram(program);
+    setCurrentExerciseIndex(0);
+    setScreen('workout');
+  };
+
+  const handleNextExercise = () => {
+    if (currentExerciseIndex < currentProgram.exercises.length - 1) {
+      setCurrentExerciseIndex(currentExerciseIndex + 1);
+    }
+  };
+
+  const handlePrevExercise = () => {
+    if (currentExerciseIndex > 0) {
+      setCurrentExerciseIndex(currentExerciseIndex - 1);
+    }
+  };
+
+  const handleSync = () => {
+    setScreen('sync');
+    let progress = 0;
+    const interval = setInterval(() => {
+      progress += Math.random() * 15;
+      if (progress >= 100) {
+        setSyncProgress(100);
+        clearInterval(interval);
+      } else {
+        setSyncProgress(Math.min(progress, 100));
+      }
+    }, 300);
+  };
+
+  // HOME SCREEN
+  if (screen === 'home') {
+    return (
+      <div className="w-full max-w-md mx-auto h-screen bg-gradient-to-b from-blue-950 to-blue-900 text-white flex flex-col">
+        {/* Header */}
+        <div className="bg-blue-900 border-b-4 border-blue-700 p-6 shadow-lg">
+          <h1 className="text-3xl font-black">ТРЕНАЖЁР</h1>
+          <p className="text-blue-200 text-sm mt-1">Московское Динамо</p>
+        </div>
+
+        {/* Programs Grid */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          {programs.map(program => (
+            <div
+              key={program.id}
+              className="bg-blue-800 border-2 border-blue-600 rounded-lg p-5 hover:bg-blue-700 transition cursor-pointer shadow-md"
+              onClick={() => handleStartWorkout(program)}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex-1">
+                  <h2 className="text-xl font-bold text-white">{program.name}</h2>
+                  <p className="text-blue-200 text-sm mt-1">{program.description}</p>
+                  <p className="text-blue-300 text-xs mt-2 font-semibold">{program.exercises.length} упражнений</p>
+                </div>
+                <div className="text-blue-200 text-3xl font-black">→</div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Footer Buttons */}
+        <div className="border-t-4 border-blue-700 bg-blue-900 p-4 space-y-2">
+          <button
+            onClick={handleSync}
+            className="w-full bg-blue-700 hover:bg-blue-600 text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition"
+          >
+            <Download size={20} /> Обновить контент
+          </button>
+          <button className="w-full bg-blue-800 hover:bg-blue-700 border-2 border-white text-white font-bold py-3 rounded-lg transition">
+            История тренировок
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // WORKOUT SCREEN
+  if (screen === 'workout') {
+    const exercise = currentProgram.exercises[currentExerciseIndex];
+    const progress = ((currentExerciseIndex + 1) / currentProgram.exercises.length) * 100;
+
+    return (
+      <div className="w-full max-w-md mx-auto h-screen bg-gradient-to-b from-blue-950 to-blue-900 text-white flex flex-col">
+        {/* Header */}
+        <div className="bg-blue-900 border-b-4 border-blue-700 p-4 shadow-lg">
+          <button
+            onClick={() => setScreen('home')}
+            className="text-blue-200 hover:text-white mb-2 font-bold"
+          >
+            ← Назад
+          </button>
+          <h1 className="text-2xl font-black">{currentProgram.name}</h1>
+          <div className="mt-2 bg-blue-800 rounded-full h-2 overflow-hidden">
+            <div
+              className="bg-blue-600 h-full transition-all duration-300"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+          <p className="text-blue-200 text-xs mt-1">
+            Упражнение {currentExerciseIndex + 1} из {currentProgram.exercises.length}
+          </p>
+        </div>
+
+        {/* Video Player */}
+        <div className="bg-black aspect-video mx-4 mt-4 rounded-lg flex items-center justify-center border-2 border-blue-600 shadow-lg">
+          <div className="text-center">
+            <div className="text-6xl mb-3">▶</div>
+            <p className="text-blue-200 text-sm">Видео загружается...</p>
+          </div>
+        </div>
+
+        {/* Exercise Info */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          <div className="bg-blue-800 border-2 border-blue-600 rounded-lg p-4">
+            <h2 className="text-2xl font-black text-blue-200">{exercise.name}</h2>
+            <p className="text-blue-300 text-sm mt-2">{exercise.description}</p>
+            <div className="mt-3 flex items-center gap-2">
+              <span className="bg-blue-700 text-white px-3 py-1 rounded font-bold">{exercise.reps}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Controls */}
+        <div className="border-t-4 border-blue-700 bg-blue-900 p-4 space-y-3">
+          <div className="flex gap-2">
+            <button
+              onClick={handlePrevExercise}
+              disabled={currentExerciseIndex === 0}
+              className="flex-1 bg-blue-800 hover:bg-blue-700 disabled:opacity-50 text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition"
+            >
+              <SkipBack size={20} /> Назад
+            </button>
+            <button
+              onClick={() => setIsPlaying(!isPlaying)}
+              className="flex-1 bg-blue-700 hover:bg-blue-600 text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition"
+            >
+              {isPlaying ? <Pause size={20} /> : <Play size={20} />}
+              {isPlaying ? 'Пауза' : 'Пуск'}
+            </button>
+            <button
+              onClick={handleNextExercise}
+              disabled={currentExerciseIndex === currentProgram.exercises.length - 1}
+              className="flex-1 bg-blue-800 hover:bg-blue-700 disabled:opacity-50 text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition"
+            >
+              Далее <SkipForward size={20} />
+            </button>
+          </div>
+          <button className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg transition flex items-center justify-center gap-2">
+            <CheckCircle size={20} /> Выполнено
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // SYNC SCREEN
+  if (screen === 'sync') {
+    return (
+      <div className="w-full max-w-md mx-auto h-screen bg-gradient-to-b from-blue-950 to-blue-900 text-white flex flex-col items-center justify-center p-4">
+        <div className="text-center space-y-6">
+          <h1 className="text-3xl font-black">Обновление контента</h1>
+
+          {/* Progress Circle */}
+          <div className="relative w-32 h-32 mx-auto">
+            <svg className="w-full h-full transform -rotate-90">
+              <circle
+                cx="64"
+                cy="64"
+                r="56"
+                stroke="#1e3a8a"
+                strokeWidth="8"
+                fill="none"
+              />
+              <circle
+                cx="64"
+                cy="64"
+                r="56"
+                stroke="#3b82f6"
+                strokeWidth="8"
+                fill="none"
+                strokeDasharray={`${2 * Math.PI * 56}`}
+                strokeDashoffset={`${2 * Math.PI * 56 * (1 - syncProgress / 100)}`}
+                className="transition-all duration-300"
+              />
+            </svg>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <span className="text-3xl font-black">{Math.round(syncProgress)}%</span>
+            </div>
+          </div>
+
+          {/* Status */}
+          <div className="space-y-2">
+            <p className="text-blue-200">Загружаю файлы...</p>
+            <div className="bg-blue-800 rounded p-3 text-left text-xs max-h-24 overflow-y-auto border-2 border-blue-600">
+              <p className="text-blue-300">✓ Спина.json</p>
+              <p className="text-blue-300">✓ Ноги.json</p>
+              <p className="text-blue-300">✓ Упражнения_1-20.mp4</p>
+              <p className="text-blue-400">⟳ Упражнения_21-40.mp4...</p>
+            </div>
+          </div>
+
+          {syncProgress === 100 && (
+            <button
+              onClick={() => setScreen('home')}
+              className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-6 rounded-lg transition"
+            >
+              Готово! ✓
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+}
+      		  createRoot(document.getElementById("root")).render(
+             <>
+      		    <TrainerApp />
+              </>
+      		    );
+              window.parent.postMessage({ action: "ready" }, "*");
+    </script>
+  </body>
+</html>

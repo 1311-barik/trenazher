@@ -14,7 +14,7 @@
 
 ```
 Google-таблица + папки Drive (Женя)
-        │  раз в 10 минут, API-ключ только на сервере
+        │  по команде: ./deploy/pull-content.sh (API-ключ только на сервере)
         ▼
 content-sync/  ──►  /var/www/trenazher/content/  (manifest.json + фото/видео)
         │
@@ -39,8 +39,11 @@ web-app/  ── nginx + HTTPS ──►  iPhone / iPad (экран «Домой
 | `docs/tz-v3.docx` | Финальное ТЗ (v3) |
 | `docs/PRODUCT_USABILITY_PROFILE.md` | Юзабилити веб-версии: прямые и обратные действия, состояния экранов, эксперименты, отклонения |
 | `docs/PRODUCT_USABILITY_PROFILE_NATIVE.md` | То же для замороженной нативной версии |
-| `docs/USABILITY_STANDARD.md` | Копия стандарта юзабилити v1.5 (оригинал — `~/Claude-Workspace/СТАНДАРТ-ЮЗАБИЛИТИ-ДЛЯ-НОВЫХ-ПРОДУКТОВ.md`) |
-| `docs/USABILITY_OBSERVATIONS.md` | Шаблон и журнал наблюдений за Андреем |
+| `docs/USABILITY_STANDARD.md` | Копия стандарта юзабилити v1.9 (оригинал — `~/Claude-Workspace/СТАНДАРТ-ЮЗАБИЛИТИ-ДЛЯ-НОВЫХ-ПРОДУКТОВ.md`) |
+| `docs/USABILITY_OBSERVATIONS.md` | Журнал наблюдений: проба Жени, что смотреть на пробе с Андреем |
+| `docs/REQUIREMENTS_TRACE.md` | Голосовое Жени → ТЗ → что в приложении и где в коде |
+| `docs/QA_RUN_2026-09-26.md` | Прогон тестировщика и главреда перед отдачей Андрею |
+| `materials/` | Голосовое Жени, черновики ТЗ, тексты для Жени, отчёты по контенту — см. `materials/README.md` |
 | `CLAUDE.md` | Правила работы с проектом для Claude и других агентов |
 
 ## Быстрый старт
@@ -61,4 +64,10 @@ cd content-sync && python3 -m unittest discover -s tests -v
 
 ```bash
 ./deploy/deploy.sh
+```
+
+Подтянуть изменения Жени из таблицы и папок Drive — только по команде владельца (автоматический таймер выключен):
+
+```bash
+./deploy/pull-content.sh
 ```

@@ -25,6 +25,6 @@ install -d -m 750 -o root -g trenazher /etc/trenazher
 umask 077
 sed "s|^TRENAZHER_API_KEY=.*|TRENAZHER_API_KEY=$KEY|" /opt/trenazher/deploy/sync.env.example > /etc/trenazher/sync.env
 chown root:trenazher /etc/trenazher/sync.env && chmod 640 /etc/trenazher/sync.env
-systemctl enable --now trenazher-sync.timer
+# Таймер не включаем: с 2026-09-27 контент подтягивается по команде (deploy/pull-content.sh).
 systemctl start --no-block trenazher-sync.service
 echo "Готово: ключ сохранён, синхронизация запущена. Первая загрузка фото и видео займёт время."
